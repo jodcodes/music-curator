@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.joeldebeljak.music-tools</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/joeldebeljak/own_repos/music-curator/music_tools/bin/run_all.sh</string>
+    </array>
+
+    <!-- Trigger: jedes Volume-Mount (run.sh prüft, ob es die 2TB_SSD ist
+         und ob der Mac am Strom hängt). Kein StartInterval mehr — kein
+         30-min-Polling-Spam in run.log.
+         Edge-case: SSD bereits gemountet UND Strom erst danach angesteckt →
+         manuell triggern via:
+           launchctl kickstart -k gui/$(id -u)/com.joeldebeljak.music-tools -->
+    <key>StartOnMount</key>
+    <true/>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/joeldebeljak/own_repos/music-curator/logs/launchd.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/joeldebeljak/own_repos/music-curator/logs/launchd.stderr.log</string>
+</dict>
+</plist>

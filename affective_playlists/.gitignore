@@ -1,0 +1,89 @@
+# Git ignore for affective_playlists
+todo
+openspec_upstream
+
+# Examples (local use only)
+playlists_folders.json
+whitelist.json
+
+# Database
+*.db
+jobs.db
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Tool outputs
+*_output*.txt
+mypy_output*.txt
+pylint_output*.txt
+.superpowers/
+
+# Data and cache
+cache/
+*.db
+*.sqlite
+data/curation_snapshots.json
+data/artist_lists/  # Keep structure but ignore generated files
+
+# Results and outputs
+temperament_analysis_results.json
+results.json
+*.csv
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+.env
+.env.local
+.env.*.local
+
+# OpenSpec (work-in-progress changes)
+openspec/changes/*/
+!openspec/changes/.gitkeep
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/

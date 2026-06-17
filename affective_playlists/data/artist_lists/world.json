@@ -1,0 +1,17 @@
+{
+  "genre": "world",
+  "description": "World music, global sounds, non-Western music",
+  "artists": [
+    "Fela Kuti",
+    "Ali Farka Touré",
+    "Youssou N'Dour",
+    "Peter Tosh",
+    "Ravi Shankar",
+    "Nusrat Fateh Ali Khan",
+    "Angelique Kidjo",
+    "Oumou Sangaré",
+    "Anoushka Shankar",
+    "Buika"
+  ],
+  "keywords": ["world", "global", "ethnic", "traditional", "african", "indian", "latin", "caribbean", "asian"]
+}

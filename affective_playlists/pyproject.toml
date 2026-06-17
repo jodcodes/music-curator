@@ -1,0 +1,101 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "affective-playlists"
+version = "1.0.0"
+description = "Unified music analysis and organization tool for Apple Music"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Joel Debeljak"}
+]
+keywords = ["music", "playlist", "ai", "metadata", "apple-music"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Topic :: Multimedia :: Sound",
+]
+
+dependencies = [
+    "requests>=2.31.0",
+    "python-dotenv>=1.0.0",
+    "openai>=1.0.0",
+    "flask>=3.0.0",
+    "celery>=5.3.0",
+    "redis>=5.0.0",
+    "sqlalchemy>=2.0.0",
+    "mutagen>=1.46.0",
+    "tqdm>=4.66.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pylint>=3.0.0",
+    "black>=23.0.0",
+    "mypy>=1.7.0",
+    "isort>=5.12.0",
+    "types-requests>=2.31.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/jodcodes/affective_playlists"
+Documentation = "https://github.com/jodcodes/affective_playlists/blob/main/README.md"
+Repository = "https://github.com/jodcodes/affective_playlists.git"
+Issues = "https://github.com/jodcodes/affective_playlists/issues"
+
+[project.scripts]
+affective-playlists = "main:main"
+affective_playlists = "main:main"
+
+[tool.setuptools]
+packages = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "."
+
+[tool.setuptools.package-data]
+src = ["**/*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311', 'py312']
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+explicit_package_bases = true
+ignore_missing_imports = false
+strict_optional = true
+namespace_packages = true
+disable_error_code = ["operator", "abstract", "no-any-return"]
+
+[[tool.mypy.overrides]]
+module = ["anthropic.*", "mutagen.*", "celery.*"]
+ignore_missing_imports = true
+
+[tool.pylint.messages_control]
+disable = [
+    "C0111",  # missing-docstring
+    "R0903",  # too-few-public-methods
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"

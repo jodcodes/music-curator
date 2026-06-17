@@ -1,0 +1,17 @@
+{
+  "genre": "jazz",
+  "description": "Jazz, bebop, cool jazz, fusion, smooth jazz",
+  "artists": [
+    "Miles Davis",
+    "John Coltrane",
+    "Charlie Parker",
+    "Herbie Hancock",
+    "Bill Evans",
+    "Thelonious Monk",
+    "Duke Ellington",
+    "Chet Baker",
+    "Art Blakey",
+    "Sonny Rollins"
+  ],
+  "keywords": ["jazz", "bebop", "fusion", "cool jazz", "smooth jazz", "avant-garde jazz", "free jazz", "post-bop", "hard bop", "modal jazz"]
+}

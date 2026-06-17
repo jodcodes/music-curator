@@ -1,0 +1,354 @@
+#!/usr/bin/env python3
+"""
+End-to-End Test Suite for plMetaTemp
+
+Tests for:
+1. 4tempers - AI temperament analysis
+2. metad_enr - Metadata enrichment
+3. plsort - Playlist organization
+"""
+
+import json
+import os
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+# Colors
+GREEN = '\033[0;32m'
+RED = '\033[0;31m'
+BLUE = '\033[0;34m'
+NC = '\033[0m'
+
+
+def print_test(name, passed, error=""):
+    """Print test result."""
+    status = f"{GREEN}✓{NC}" if passed else f"{RED}✗{NC}"
+    print(f"  {status} {name}")
+    if error:
+        print(f"    {RED}Error: {error}{NC}")
+
+
+def print_section(title):
+    """Print section header."""
+    print(f"\n{BLUE}{'='*70}")
+    print(f"➜ {title}")
+    print(f"{'='*70}{NC}\n")
+
+
+class TestResult:
+    """Track test results."""
+    def __init__(self):
+        self.total = 0
+        self.passed = 0
+        self.failed = 0
+        self.errors = []
+    
+    def add(self, name, passed, error=""):
+        self.total += 1
+        if passed:
+            self.passed += 1
+        else:
+            self.failed += 1
+            self.errors.append((name, error))
+        print_test(name, passed, error)
+    
+    def summary(self):
+        print(f"\n{BLUE}{'='*70}{NC}")
+        print(f"Total: {self.total} | {GREEN}Passed: {self.passed}{NC} | {RED}Failed: {self.failed}{NC}")
+        print(f"{BLUE}{'='*70}{NC}")
+        return self.failed == 0
+
+
+def test_shared_modules():
+    """Test shared modules."""
+    print_section("Testing Shared Modules")
+    results = TestResult()
+    
+    try:
+        from shared.apple_music import AppleMusicInterface
+        results.add("Import AppleMusicInterface", True)
+    except Exception as e:
+        results.add("Import AppleMusicInterface", False, str(e))
+    
+    try:
+        from shared.normalizer import TextNormalizer
+        results.add("Import TextNormalizer", True)
+    except Exception as e:
+        results.add("Import TextNormalizer", False, str(e))
+    
+    try:
+        from shared.logger import setup_logger
+        results.add("Import setup_logger", True)
+    except Exception as e:
+        results.add("Import setup_logger", False, str(e))
+    
+    # Test TextNormalizer functionality
+    try:
+        from shared.normalizer import TextNormalizer
+        normalizer = TextNormalizer()
+        result = normalizer.normalize("  HELLO & World!  ")
+        passed = result == "hello and world"
+        results.add("TextNormalizer.normalize()", passed, f"Got: {result}")
+    except Exception as e:
+        results.add("TextNormalizer.normalize()", False, str(e))
+    
+    assert results.summary(), f"Test failures: {results.errors}"
+
+
+def test_4tempers():
+    """Test 4tempers module."""
+    print_section("Testing 4tempers - AI Temperament Analysis")
+    results = TestResult()
+    
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT / '4tempers'))
+        # Try to import core modules
+        results.add("4tempers module structure exists", True)
+    except Exception as e:
+        results.add("4tempers module structure exists", False, str(e))
+    
+    # Check config file
+    config_path = PROJECT_ROOT / '4tempers' / 'config.json'
+    try:
+        if config_path.exists():
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            results.add("4tempers config.json loads", True)
+            results.add("4tempers has API keys config", 'api_keys' in config)
+        else:
+            results.add("4tempers config.json exists", False, "File not found")
+    except Exception as e:
+        results.add("4tempers config.json loads", False, str(e))
+    
+    assert results.summary(), f"Test failures: {results.errors}"
+
+
+def test_metad_enr():
+    """Test metad_enr module."""
+    print_section("Testing metad_enr - Metadata Enrichment")
+    results = TestResult()
+    
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT / 'metad_enr'))
+        # Check module structure
+        from src.audio_tags import TagManager
+        results.add("metad_enr.audio_tags imports", True)
+    except Exception as e:
+        results.add("metad_enr.audio_tags imports", False, str(e))
+    
+    try:
+        from src.metadata_enrichment import MetadataEnricher
+        results.add("metad_enr.metadata_enrichment imports", True)
+    except Exception as e:
+        results.add("metad_enr.metadata_enrichment imports", False, str(e))
+    
+    # Check config file
+    config_path = PROJECT_ROOT / 'metad_enr' / 'config.json'
+    try:
+        if config_path.exists():
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            results.add("metad_enr config.json loads", True)
+            results.add("metad_enr has database config", 'databases' in config)
+        else:
+            results.add("metad_enr config.json exists", False, "File not found")
+    except Exception as e:
+        results.add("metad_enr config.json loads", False, str(e))
+    
+    assert results.summary(), f"Test failures: {results.errors}"
+
+
+def test_plsort():
+    """Test plsort module."""
+    print_section("Testing plsort - Playlist Organization")
+    results = TestResult()
+    
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT / 'plsort'))
+        from src.classifier import RuleBasedClassifier, TrackMetadata
+        results.add("plsort.classifier imports", True)
+    except Exception as e:
+        results.add("plsort.classifier imports", False, str(e))
+    
+    try:
+        from src.ml_classifier import TFIDFClassifier
+        results.add("plsort.ml_classifier imports", True)
+    except Exception as e:
+        results.add("plsort.ml_classifier imports", False, str(e))
+    
+    try:
+        from src.orchestrator import PlaylistOrganizer
+        results.add("plsort.orchestrator imports", True)
+    except Exception as e:
+        results.add("plsort.orchestrator imports", False, str(e))
+    
+    # Test classifier functionality
+    try:
+        from src.classifier import RuleBasedClassifier, TrackMetadata
+        classifier = RuleBasedClassifier(
+            config_dir=str(PROJECT_ROOT / 'plsort' / 'config'),
+            data_dir=str(PROJECT_ROOT / 'plsort' / 'data')
+        )
+        # Create test track
+        track = TrackMetadata(title="Test", artist="Test Artist")
+        results.add("plsort RuleBasedClassifier instantiates", True)
+    except Exception as e:
+        results.add("plsort RuleBasedClassifier instantiates", False, str(e))
+    
+    # Check config file
+    config_path = PROJECT_ROOT / 'plsort' / 'config.json'
+    try:
+        if config_path.exists():
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            results.add("plsort config.json loads", True)
+            results.add("plsort has genre config", 'genres' in config)
+        else:
+            results.add("plsort config.json exists", False, "File not found")
+    except Exception as e:
+        results.add("plsort config.json loads", False, str(e))
+    
+    assert results.summary(), f"Test failures: {results.errors}"
+
+
+def test_cli():
+    """Test main CLI."""
+    print_section("Testing Main CLI")
+    results = TestResult()
+    
+    import subprocess
+
+    # Test --help
+    try:
+        result = subprocess.run(
+            [sys.executable, str(PROJECT_ROOT / 'main.py'), '--help'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        results.add("main.py --help", result.returncode == 0)
+    except Exception as e:
+        results.add("main.py --help", False, str(e))
+    
+    # Test --list
+    try:
+        result = subprocess.run(
+            [sys.executable, str(PROJECT_ROOT / 'main.py'), '--list'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        passed = result.returncode == 0 and '4tempers' in result.stdout
+        results.add("main.py --list", passed)
+    except Exception as e:
+        results.add("main.py --list", False, str(e))
+    
+    assert results.summary(), f"Test failures: {results.errors}"
+
+
+def test_configuration():
+    """Test configuration files."""
+    print_section("Testing Configuration Files")
+    results = TestResult()
+    
+    config_files = [
+        ('4tempers/config.json', '4tempers'),
+        ('metad_enr/config.json', 'metad_enr'),
+        ('plsort/config.json', 'plsort'),
+    ]
+    
+    for file_path, name in config_files:
+        full_path = PROJECT_ROOT / file_path
+        try:
+            if full_path.exists():
+                with open(full_path, 'r') as f:
+                    config = json.load(f)
+                results.add(f"{name} config.json is valid", True)
+            else:
+                results.add(f"{name} config.json exists", False, "File not found")
+        except Exception as e:
+            results.add(f"{name} config.json is valid", False, str(e))
+    
+    # Test centralized whitelist file
+    whitelist_path = PROJECT_ROOT / 'whitelist.json'
+    try:
+        if whitelist_path.exists():
+            with open(whitelist_path, 'r') as f:
+                whitelist = json.load(f)
+            has_enabled = 'enabled' in whitelist
+            has_playlists = 'playlists' in whitelist
+            playlist_count = len(whitelist.get('playlists', []))
+            results.add(f"Centralized whitelist.json is valid", has_enabled and has_playlists)
+            results.add(f"Whitelist has {playlist_count} playlists", playlist_count > 0)
+        else:
+            results.add(f"Centralized whitelist.json exists", False, "File not found")
+    except Exception as e:
+        results.add(f"Centralized whitelist.json is valid", False, str(e))
+    
+    assert results.summary(), f"Test failures: {results.errors}"
+
+
+def test_imports_from_shared():
+    """Test that all subprojects can import from shared."""
+    print_section("Testing Imports from Shared Modules")
+    results = TestResult()
+    
+    # Direct test of shared modules
+    try:
+        from shared.normalizer import TextNormalizer
+        results.add("Shared TextNormalizer available", True)
+    except Exception as e:
+        results.add("Shared TextNormalizer available", False, str(e))
+    
+    try:
+        from shared.apple_music import AppleMusicInterface
+        results.add("Shared AppleMusicInterface available", True)
+    except Exception as e:
+        results.add("Shared AppleMusicInterface available", False, str(e))
+    
+    assert results.summary(), f"Test failures: {results.errors}"
+
+
+def main():
+    """Run all tests."""
+    print(f"{BLUE}")
+    print("╔" + "═"*68 + "╗")
+    print("║" + " "*68 + "║")
+    print("║" + "  plMetaTemp - End-to-End Test Suite".center(68) + "║")
+    print("║" + "  Testing all three subprojects".center(68) + "║")
+    print("║" + " "*68 + "║")
+    print("╚" + "═"*68 + "╝")
+    print(f"{NC}")
+    
+    # Run all tests
+    results = []
+    results.append(("Shared Modules", test_shared_modules()))
+    results.append(("4tempers", test_4tempers()))
+    results.append(("metad_enr", test_metad_enr()))
+    results.append(("plsort", test_plsort()))
+    results.append(("Configuration", test_configuration()))
+    results.append(("Shared Imports", test_imports_from_shared()))
+    results.append(("CLI", test_cli()))
+    
+    # Summary
+    print_section("Test Summary")
+    all_passed = True
+    for name, passed in results:
+        status = f"{GREEN}PASS{NC}" if passed else f"{RED}FAIL{NC}"
+        print(f"  {status} - {name}")
+        all_passed = all_passed and passed
+    
+    print()
+    if all_passed:
+        print(f"{GREEN}✓ All tests passed! plMetaTemp is ready to use.{NC}\n")
+        return 0
+    else:
+        print(f"{RED}✗ Some tests failed. Please review errors above.{NC}\n")
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

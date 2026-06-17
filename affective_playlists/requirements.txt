@@ -1,0 +1,22 @@
+# affective_playlists - Unified Dependencies
+# Python 3.10+ required
+
+# Core dependencies
+requests>=2.31.0           # HTTP requests (APIs, web enrichment)
+python-dotenv>=1.0.0       # Environment variable management
+openai>=1.0.0              # OpenAI API for temperament analysis
+flask>=3.0.0               # Web server
+sqlalchemy>=2.0.0          # ORM for database access
+celery>=5.3.0              # Background task queue
+redis>=5.0.0               # Task broker and caching
+python-socketio>=5.9.0     # WebSocket support
+
+# Development and code quality (move to requirements-dev.txt if using setuptools)
+pytest>=7.4.0              # Testing framework
+pytest-cov>=4.1.0          # Code coverage for pytest
+pylint>=3.0.0              # Code linting
+black>=23.0.0              # Code formatting
+mypy>=1.7.0                # Static type checking
+isort>=5.12.0              # Import sorting
+
+# Note: macOS is required for Apple Music integration via AppleScript

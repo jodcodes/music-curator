@@ -1,0 +1,4 @@
+.DS_Store
+logs/
+state/.last_sync
+state/MusicAutomation_lastRun.txt

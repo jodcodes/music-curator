@@ -1,0 +1,22 @@
+{
+  "temperament_folders": {
+    "woe": "Woe (Melancholic)",
+    "frolic": "Frolic (Sanguine)",
+    "dread": "Dread (Phlegmatic)",
+    "malice": "Malice (Choleric)"
+  },
+  "genre_folders": {
+    "pop": "Pop",
+    "rock": "Rock",
+    "hiphop": "Hip-Hop",
+    "electronic": "Electronic",
+    "country": "Country",
+    "world": "World",
+    "jazz": "Jazz",
+    "disco_funk_soul": "Disco/Funk/Soul",
+    "classical": "Classical",
+    "ambient": "Ambient",
+    "soundtrack": "Soundtrack",
+    "other": "Other"
+  }
+}

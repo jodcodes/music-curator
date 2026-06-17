@@ -1,0 +1,17 @@
+{
+  "genre": "hiphop",
+  "description": "Hip-hop, rap, trap, boom bap, mumble rap",
+  "artists": [
+    "Nas",
+    "Tupac Shakur",
+    "The Notorious B.I.G.",
+    "Jay-Z",
+    "Rakim",
+    "Kendrick Lamar",
+    "J. Cole",
+    "Drake",
+    "Kanye West",
+    "OutKast"
+  ],
+  "keywords": ["hip-hop", "rap", "trap", "boom bap", "mumble rap", "conscious rap", "gangsta rap", "east coast hip-hop", "west coast hip-hop", "southern hip-hop"]
+}

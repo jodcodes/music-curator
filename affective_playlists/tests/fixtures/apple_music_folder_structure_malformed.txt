@@ -1,0 +1,2 @@
+Missing separator line
+Another bad line

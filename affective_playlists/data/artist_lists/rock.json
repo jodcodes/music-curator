@@ -1,0 +1,17 @@
+{
+  "genre": "rock",
+  "description": "Rock, hard rock, alternative rock, indie rock, classic rock",
+  "artists": [
+    "The Beatles",
+    "Rolling Stones",
+    "Led Zeppelin",
+    "Pink Floyd",
+    "The Who",
+    "Queen",
+    "David Bowie",
+    "Radiohead",
+    "Arctic Monkeys",
+    "The Strokes"
+  ],
+  "keywords": ["rock", "hard rock", "alternative rock", "indie rock", "classic rock", "progressive rock", "punk", "post-rock", "psychedelic rock", "grunge"]
+}

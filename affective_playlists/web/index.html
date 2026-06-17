@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#ffffff">
+    <title>affective_playlists</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <h1>♫ affective_playlists</h1>
+            </div>
+            <ul class="nav-menu" id="navMenu">
+                <li><a href="#" data-view="dashboard" class="nav-link active">Dashboard</a></li>
+                <li><a href="#" data-view="playlists" class="nav-link">Playlists</a></li>
+                <li><a href="#" data-view="enrich" class="nav-link">Enrich</a></li>
+                <li><a href="#" data-view="analyze" class="nav-link">Analyze</a></li>
+                <li><a href="#" data-view="organize" class="nav-link">Organize</a></li>
+                <li><button type="button" class="nav-link" data-view="curation">Curation Review</button></li>
+            </ul>
+            <div class="nav-actions">
+                <button id="themeToggle" class="btn-icon" title="Toggle theme">☀️</button>
+                <button id="menuToggle" class="btn-icon hamburger">☰</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Header with status -->
+        <header class="page-header">
+            <h2 id="pageTitle">Dashboard</h2>
+            <div class="header-status">
+                <span id="statusIndicator" class="status-online">● Online</span>
+            </div>
+        </header>
+
+        <!-- Alert banner for errors -->
+        <div id="alertBanner" class="alert alert-hidden"></div>
+
+        <!-- Views Container -->
+        <div class="views-container">
+            <!-- Dashboard View -->
+            <section id="dashboard" class="view active">
+                <div class="dashboard-grid">
+                    <!-- Stats Cards -->
+                    <div class="card stat-card">
+                        <div class="stat-number" id="statPlaylists">0</div>
+                        <div class="stat-label">Playlists</div>
+                    </div>
+                    <div class="card stat-card">
+                        <div class="stat-number" id="statTracks">0</div>
+                        <div class="stat-label">Total Tracks</div>
+                    </div>
+                    <div class="card stat-card">
+                        <div class="stat-number" id="statClassified">0</div>
+                        <div class="stat-label">Classified</div>
+                    </div>
+                    <div class="card stat-card">
+                        <div class="stat-number" id="statPlatform">—</div>
+                        <div class="stat-label">Platform</div>
+                    </div>
+
+                    <!-- Quick Actions -->
+                    <div class="card action-card">
+                        <h3>Quick Actions</h3>
+                        <div class="action-buttons">
+                            <button class="btn btn-primary" data-action="classify">Classify Playlists</button>
+                            <button class="btn btn-primary" data-action="enrich">Enrich Metadata</button>
+                            <button class="btn btn-primary" data-action="analyze">Analyze Mood</button>
+                            <button class="btn btn-secondary" data-action="organize">Organize</button>
+                        </div>
+                    </div>
+
+                    <!-- Recent Activity -->
+                    <div class="card">
+                        <h3>Recent Activity</h3>
+                        <div id="recentActivity" class="activity-list">
+                            <p class="text-muted">No recent activity</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Playlists View -->
+            <section id="playlists" class="view">
+                <div class="view-toolbar">
+                    <input type="text" id="playlistSearch" class="search-input" placeholder="Search playlists...">
+                    <select id="genreFilter" class="filter-select">
+                        <option value="">All Genres</option>
+                        <option value="rock">Rock</option>
+                        <option value="pop">Pop</option>
+                        <option value="jazz">Jazz</option>
+                        <option value="electronic">Electronic</option>
+                        <option value="hiphop">Hip-Hop</option>
+                        <option value="world">World</option>
+                    </select>
+                </div>
+
+                <div class="table-container">
+                    <table class="table" id="playlistsTable">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Tracks</th>
+                                <th>Genre</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="playlistsBody">
+                            <tr><td colspan="5" class="text-center text-muted">Loading playlists...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Enrichment View -->
+            <section id="enrich" class="view">
+                <div class="card">
+                    <h3>Metadata Enrichment</h3>
+                    <p class="text-muted">Enhance track metadata from multiple sources.</p>
+
+                    <div class="form-group">
+                        <label>Sources to use:</label>
+                        <div class="checkbox-group">
+                            <label><input type="checkbox" name="source" value="spotify" checked> Spotify</label>
+                            <label><input type="checkbox" name="source" value="genius" checked> Genius</label>
+                            <label><input type="checkbox" name="source" value="musicbrainz"> MusicBrainz</label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Fields to enrich:</label>
+                        <div class="checkbox-group">
+                            <label><input type="checkbox" name="field" value="genre" checked> Genre</label>
+                            <label><input type="checkbox" name="field" value="year" checked> Year</label>
+                            <label><input type="checkbox" name="field" value="bpm" checked> BPM</label>
+                            <label><input type="checkbox" name="field" value="key" checked> Key</label>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary btn-lg" id="startEnrichmentBtn">Start Enrichment</button>
+                </div>
+
+                <!-- Progress Section -->
+                <div id="enrichmentProgress" class="card" style="display: none;">
+                    <h3>Enrichment Progress</h3>
+                    <div class="progress-bar">
+                        <div id="enrichmentProgressBar" class="progress-fill"></div>
+                    </div>
+                    <p id="enrichmentStatus" class="text-center">Starting...</p>
+                    <button class="btn btn-secondary" id="cancelEnrichmentBtn">Cancel</button>
+                </div>
+
+                <!-- Results Section -->
+                <div id="enrichmentResults" class="card" style="display: none;">
+                    <h3>Enrichment Results</h3>
+                    <p id="enrichmentResultsSummary"></p>
+                    <div id="enrichmentResultsTable" class="table-container"></div>
+                </div>
+            </section>
+
+            <!-- Analyze View -->
+            <section id="analyze" class="view">
+                <div class="card">
+                    <h3>Mood Analysis (Temperament)</h3>
+                    <p class="text-muted">Classify tracks by emotional temperament.</p>
+
+                    <div class="form-group">
+                        <label for="analyzePlaylists">Select Playlists:</label>
+                        <select id="analyzePlaylists" multiple class="form-control">
+                            <option value="">Loading...</option>
+                        </select>
+                        <small>Hold Ctrl/Cmd to select multiple</small>
+                    </div>
+
+                    <button class="btn btn-primary btn-lg" id="startAnalysisBtn">Start Analysis</button>
+                </div>
+
+                <!-- Analysis Results -->
+                <div id="analysisResults" class="card" style="display: none;">
+                    <h3>Analysis Results</h3>
+                    <div id="temperamentChart" class="temperament-grid"></div>
+                    <button class="btn btn-secondary" id="exportAnalysisBtn">Export as CSV</button>
+                </div>
+            </section>
+
+            <!-- Organize View -->
+            <section id="organize" class="view">
+                <div class="card">
+                    <h3>Organize Playlists</h3>
+                    <p class="text-muted">Move playlists to organized folders based on genre.</p>
+
+                    <div id="platformWarning" class="alert alert-info" style="display: none;">
+                        ⓘ Playlist organization requires macOS. Metadata enrichment is available on all platforms.
+                    </div>
+
+                    <button class="btn btn-primary btn-lg" id="reviewChangesBtn" disabled>Review Changes</button>
+                </div>
+
+                <!-- Preview Section -->
+                <div id="organizationPreview" class="card" style="display: none;">
+                    <h3>Organization Preview (Dry Run)</h3>
+                    <p class="text-muted" id="previewSummary"></p>
+
+                    <div class="table-container">
+                        <table class="table" id="previewTable">
+                            <thead>
+                                <tr>
+                                    <th>Playlist</th>
+                                    <th>Current</th>
+                                    <th>Proposed</th>
+                                    <th>Genre</th>
+                                </tr>
+                            </thead>
+                            <tbody id="previewBody">
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="button-group">
+                        <button class="btn btn-primary" id="confirmMoveBtn">Confirm & Execute</button>
+                        <button class="btn btn-secondary" id="cancelMoveBtn">Cancel</button>
+                    </div>
+                </div>
+
+                <!-- Results Section -->
+                <div id="organizationResults" class="card" style="display: none;">
+                    <h3>Organization Results</h3>
+                    <p id="organizationResultsSummary"></p>
+                    <div id="organizationResultsTable" class="table-container"></div>
+                </div>
+            </section>
+
+            <!-- Curation Review View -->
+            <section id="curation-view" class="view">
+                <div class="control-center">
+                    <aside class="control-rail">
+                        <h3>Fav Songs</h3>
+                        <div id="curation-system-status" class="system-status">
+                            <div><span>SSD</span><strong>Unknown</strong></div>
+                            <div><span>Music.app</span><strong>Unknown</strong></div>
+                            <div><span>Snapshot</span><strong>Not loaded</strong></div>
+                        </div>
+                    </aside>
+
+                    <section class="control-main">
+                        <div class="control-main-header">
+                            <div>
+                                <h3>Fav Songs</h3>
+                                <p class="text-muted">Genre folders with four temper playlists per genre.</p>
+                            </div>
+                            <div class="curation-actions">
+                                <button class="btn btn-secondary" id="curation-load-snapshot-btn">Snapshot laden</button>
+                                <button class="btn btn-primary" id="curation-refresh-btn">Neu lesen</button>
+                            </div>
+                        </div>
+
+                        <div id="curation-summary" class="curation-summary"></div>
+                        <div id="curation-genre-tree" class="curation-compat-shim" aria-hidden="true"></div>
+
+                        <div class="matrix-toolbar">
+                            <input id="curation-genre-filter" class="search-input" type="search" aria-label="Genre suchen">
+                            <button class="btn btn-secondary" id="curation-problems-only-btn" type="button">Nur Probleme</button>
+                            <button class="btn btn-secondary" id="curation-top-genres-btn" type="button">Top Genres</button>
+                        </div>
+
+                        <section id="curation-review-panel" class="curation-review-panel">
+                            <div class="card curation-empty-state">
+                                <h3>No Snapshot Loaded</h3>
+                                <p class="text-muted">Load the last snapshot or read Music.app again.</p>
+                            </div>
+                        </section>
+                    </section>
+
+                    <aside id="curation-write-panel" class="write-safety-panel">
+                        <h3>Schreibschutz</h3>
+                            <p class="text-muted">Apply queues as a background job after a fresh snapshot and mini-test.</p>
+                        <button class="btn btn-secondary" id="curation-smoke-test-btn" type="button" disabled>Mini-Test ausführen</button>
+                        <button class="btn btn-primary" id="curation-apply-btn" type="button" disabled>1-Track Apply testen</button>
+                        <div id="curation-change-panel" class="curation-change-panel"></div>
+                    </aside>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="spinner hidden"></div>
+
+    <!-- Modal for Confirmation -->
+    <div id="confirmModal" class="modal hidden">
+        <div class="modal-content">
+            <h3 id="confirmTitle">Confirm Action</h3>
+            <p id="confirmMessage"></p>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" id="confirmYes">Yes</button>
+                <button class="btn btn-secondary" id="confirmNo">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Background (click to close) -->
+    <div id="modalBackdrop" class="modal-backdrop hidden"></div>
+
+    <!-- Scripts -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

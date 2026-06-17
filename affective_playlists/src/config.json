@@ -1,0 +1,14 @@
+{
+  "api_keys": {
+    "openai": "from_env_OPENAI_API_KEY",
+    "spotify": "from_env_SPOTIFY"
+  },
+  "caching": {
+    "enabled": true,
+    "cache_dir": "../cache"
+  },
+  "logging": {
+    "level": "INFO",
+    "log_file": "../logs/4tempers.log"
+  }
+}

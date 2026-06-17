@@ -1,0 +1,72 @@
+# macOS / editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# local env / secrets
+.env
+.env.*
+!.env.example
+*.secret.json
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+build/
+dist/
+*.egg-info/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# local state / generated data
+logs/
+*.log
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+cache/
+state/
+data/curation_snapshots.json
+temperament_analysis_results.json
+results.json
+*.csv
+
+# repo-local agent/tool state
+.superpowers/
+todo
+openspec_upstream
+
+# separate local project; contains its own git repo and credentials
+pitch2play/
+
+# apple2spfy generated/user-specific files
+apple2spfy/get_playlist.scpt
+apple2spfy/auto_sync_on_drive.sh
+apple2spfy/track_cache.json
+apple2spfy/transfer_history.json
+
+# affective_playlists local examples/config
+affective_playlists/playlists_folders.json
+affective_playlists/whitelist.json
+affective_playlists/.env
+affective_playlists/.venv/
+affective_playlists/.mypy_cache/
+affective_playlists/.pytest_cache/
+
+# apple2spfy local env/cache
+apple2spfy/.env
+apple2spfy/.mypy_cache/
+apple2spfy/.pytest_cache/

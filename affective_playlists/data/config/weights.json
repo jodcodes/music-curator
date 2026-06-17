@@ -1,0 +1,25 @@
+{
+    "genre_match": 3,
+    "artist_match": 2,
+    "composer_match": 1,
+    "bpm_match": 1,
+    "bpm_ranges": {
+        "pop": [90, 130],
+        "rock": [110, 160],
+        "hiphop": [70, 140],
+        "electronic": [90, 190],
+        "country": [80, 130],
+        "world": [60, 150],
+        "jazz": [80, 220],
+        "disco_funk_soul": [60, 160],
+        "classical": [40, 180],
+        "ambient": [40, 100],
+        "soundtrack": [40, 180],
+        "other": [60, 140]
+    },
+    "dominance_threshold": 0.3,
+    "min_track_count": 3,
+    "partial_match_weight": 0.5,
+    "keyword_match_weight": 0.5,
+    "bpm_tolerance": 10
+}

@@ -1,0 +1,33 @@
+-- List of desired Playlists with correct prefix
+set selectedPlaylists to {}
+
+-- Function to remove leading and trailing whitespace
+on trimText(theText)
+	set theText to (do shell script "echo " & quoted form of theText & " | awk '{$1=$1;print}'")
+	return theText
+end trimText
+
+tell application "Music"
+	set outputText to ""
+	repeat with plName in selectedPlaylists
+		set cleanName to my trimText(plName)
+		if exists playlist cleanName then
+			set outputText to outputText & "### " & cleanName & " ###" & linefeed
+			repeat with t in tracks of playlist cleanName
+				set trackName to name of t
+				set artistName to artist of t
+				try
+					set albumName to album of t
+					set outputText to outputText & trackName & "|" & artistName & "|" & albumName & linefeed
+				on error
+					set outputText to outputText & trackName & "|" & artistName & linefeed
+				end try
+			end repeat
+			set outputText to outputText & linefeed
+		else
+			set outputText to outputText & "### " & cleanName & " (NOT FOUND)" & linefeed & linefeed
+		end if
+	end repeat
+end tell
+
+return outputText

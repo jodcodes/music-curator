@@ -1,0 +1,30 @@
+schema: spec-driven
+project:
+  name: affective_playlists
+  language: python
+  type: brownfield
+context: |
+  Unified suite for playlist temperament analysis, metadata enrichment,
+  and genre-based playlist organization.
+
+  Core constraints:
+  - Apple Music integration depends on macOS and AppleScript.
+  - Metadata enrichment should support robust fallback behavior across sources.
+  - Existing docs in docs/requirements/ are legacy sources and should be
+    progressively migrated to openspec/specs/.
+rules:
+  authoring:
+    - Use normative language (SHALL/MUST/MUST NOT).
+    - Each requirement includes verifiable GIVEN/WHEN/THEN scenarios.
+    - Describe current behavior for seeding; do not invent target behavior.
+  changes:
+    - New behavior must start in openspec/changes/<name>/ via propose.
+    - Do not edit openspec/specs/ directly for new features.
+    - Archive completed changes to merge delta specs into base specs.
+quality:
+  checks:
+    - pytest tests/ -v
+    - mypy src/
+    - pylint src/
+    - black --check src/ tests/
+    - isort --check-only src/ tests/
