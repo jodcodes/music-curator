@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install affective_playlists test dependencies
+        working-directory: affective_playlists
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Music Curator launcher smoke test
+        run: python music_curator.py --list
+
+      - name: Affective Playlists safe tests
+        working-directory: affective_playlists
+        run: |
+          python -m pytest \
+            tests/test_curation_models.py \
+            tests/test_curation_service.py \
+            tests/test_apple_music_structure.py \
+            -q
