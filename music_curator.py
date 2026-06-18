@@ -10,19 +10,31 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
 TOOLS = {
-    "affective": (ROOT / "affective_playlists", ["python3", "main.py"]),
-    "apple2spfy": (ROOT / "apple2spfy", ["python3", "sync_playlists.py"]),
-    "music-tools": (ROOT / "music_tools", ["bash", "bin/run_all.sh"]),
+    "affective": (
+        "4tempers, Fav Songs curation, metadata, playlist organization",
+        ROOT / "affective_playlists",
+        ["python3", "main.py"],
+    ),
+    "apple2spfy": (
+        "Apple Music to Spotify playlist sync",
+        ROOT / "apple2spfy",
+        ["python3", "sync_playlists.py"],
+    ),
+    "music-tools": (
+        "local Apple Music maintenance scripts",
+        ROOT / "music_tools",
+        ["bash", "bin/run_all.sh"],
+    ),
 }
 
 
 def list_tools() -> None:
-    for name in TOOLS:
-        print(name)
+    for name, (description, _, _) in TOOLS.items():
+        print(f"{name:12} {description}")
 
 
 def run_tool(name: str, args: list[str]) -> int:
-    cwd, command = TOOLS[name]
+    _, cwd, command = TOOLS[name]
     return subprocess.call(command + args, cwd=cwd)
 
 

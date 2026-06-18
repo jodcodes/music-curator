@@ -2,6 +2,8 @@
 
 Personal music automation tools for Apple Music, Spotify playlist sync, and local library maintenance.
 
+Requires macOS for commands that talk to Music.app. Some read-only tests run on Linux in CI.
+
 This repo is intentionally split into small tools instead of one shared framework. Some duplication is cheaper than a brittle abstraction.
 
 ## Tools
@@ -20,10 +22,20 @@ Each tool has its own setup notes and dependencies. Start in the tool folder you
 
 ```bash
 python3 music_curator.py --list
+python3 music_curator.py
 python3 music_curator.py affective --help
+python3 music_curator.py apple2spfy --help
+python3 music_curator.py music-tools
 
 cd affective_playlists
 python -m pytest tests/test_curation_models.py tests/test_curation_service.py tests/test_apple_music_structure.py -q
+```
+
+Install dependencies inside each tool folder when needed:
+
+```bash
+cd affective_playlists && python -m pip install -e ".[dev]"
+cd apple2spfy && python -m pip install -r requirements.txt
 ```
 
 Copy `.env.example` to `.env` only for local use. Never commit real tokens, exports, logs, caches, or Music snapshots.
