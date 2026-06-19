@@ -32,6 +32,7 @@ jobs:
         run: |
           python -m pytest \
             tests/test_curation_models.py \
+            tests/test_temperament_analyzer_quick.py \
             tests/test_curation_service.py \
             tests/test_apple_music_structure.py \
             -q

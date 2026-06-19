@@ -59,6 +59,7 @@ from dotenv import load_dotenv
 from tqdm import tqdm
 
 from src.models import ClassificationResult, Playlist, Temperament, Track
+from src.genre_groups import canonical_genre_label
 from src.playlist_utils import PlaylistSelector, PlaylistWhitelistFilter
 from src.prompts import (
     SYSTEM_PROMPT_PLAYLIST,
@@ -117,6 +118,10 @@ class MusicLibraryClient(ABC):
     def create_folder(self, folder_name: str) -> str:
         """Create a playlist folder and return its ID"""
         pass
+
+    def create_folder_in_folder(self, folder_name: str, parent_folder_id: str) -> str:
+        """Create a playlist folder inside a parent folder and return its ID"""
+        return self.create_folder(folder_name)
 
     @abstractmethod
     def move_playlist_to_folder(self, playlist_id: str, folder_id: str) -> bool:
@@ -399,10 +404,16 @@ class MusicAppClient(MusicLibraryClient):
         """Create a playlist folder in Music.app and return its ID"""
         try:
             # Use AppleScript to create folder
+            safe_folder_name = folder_name.replace('"', '\\"')
             script = f"""
 tell application "Music"
-    set newFolder to make new folder playlist with properties {{name:"{folder_name}"}}
-    return (get persistent ID of newFolder)
+    set existingFolders to every folder playlist whose name is "{safe_folder_name}"
+    if (count of existingFolders) > 0 then
+        set targetFolder to item 1 of existingFolders
+    else
+        set targetFolder to make new folder playlist with properties {{name:"{safe_folder_name}"}}
+    end if
+    return (get persistent ID of targetFolder)
 end tell
             """
             result = self._run_applescript(script)
@@ -419,6 +430,35 @@ end tell
         except Exception as e:
             logger.warning(f"Could not create folder via AppleScript: {e}")
             # Fallback: return mock ID
+            return cast(str, f"folder_{folder_name.lower().replace(' ', '_')}")
+
+    def create_folder_in_folder(self, folder_name: str, parent_folder_id: str) -> str:
+        """Create a playlist folder inside another Music.app folder and return its ID"""
+        try:
+            safe_folder_name = folder_name.replace('"', '\\"')
+            script = f"""
+tell application "Music"
+    set parentFolder to first folder playlist whose persistent ID is "{parent_folder_id}"
+    set existingFolders to every folder playlist of parentFolder whose name is "{safe_folder_name}"
+    if (count of existingFolders) > 0 then
+        set targetFolder to item 1 of existingFolders
+    else
+        set targetFolder to make new folder playlist at parentFolder with properties {{name:"{safe_folder_name}"}}
+    end if
+    return (get persistent ID of targetFolder)
+end tell
+            """
+            result = self._run_applescript(script)
+            folder_id = result.strip() if result else None
+
+            if folder_id:
+                logger.info(f"Created nested folder: {folder_name} (ID: {folder_id})")
+                return cast(str, folder_id)
+            logger.error(f"Failed to create nested folder: {folder_name}")
+            return ""
+
+        except Exception as e:
+            logger.warning(f"Could not create nested folder via AppleScript: {e}")
             return cast(str, f"folder_{folder_name.lower().replace(' ', '_')}")
 
     def move_playlist_to_folder(self, playlist_id: str, folder_id: str) -> bool:
@@ -679,8 +719,8 @@ class TemperamentAnalyzer:
 
         logger.info(f"Found {len(playlists)} playlists to analyze")
 
-        logger.info("Setting up temperament folders...")
-        folders = self._create_temperament_folders()
+        logger.info("Setting up 4 Tempers folders...")
+        root_folder_id = self._create_root_folder()
 
         logger.info("Classifying playlists...")
 
@@ -721,7 +761,11 @@ class TemperamentAnalyzer:
                 )
                 logger.info(f"Reasoning: {playlist_classification.reasoning}")
 
-                folder_id = folders[playlist_classification.temperament]
+                folder_id = self._ensure_temperament_folder(
+                    root_folder_id,
+                    self._playlist_genre_label(playlist),
+                    playlist_classification.temperament,
+                )
                 success = self.music_client.move_playlist_to_folder(playlist.playlist_id, folder_id)
 
                 self.results_log.append(
@@ -747,16 +791,28 @@ class TemperamentAnalyzer:
         logger.info("Analysis complete!")
         return True
 
-    def _create_temperament_folders(self) -> Dict[Temperament, str]:
-        """Create folders for each temperament category"""
-        folders = {}
+    def _create_root_folder(self) -> str:
+        """Create root folder for 4 Tempers output."""
+        folder_id = self.music_client.create_folder("4 Tempers")
+        logger.info(f"Folder for 4 Tempers: {folder_id}")
+        return folder_id
 
-        for temperament in Temperament:
-            folder_id = self.music_client.create_folder(temperament.value)
-            folders[temperament] = folder_id
-            logger.info(f"Folder for {temperament.value}: {folder_id}")
+    def _ensure_temperament_folder(
+        self, root_folder_id: str, genre_label: str, temperament: Temperament
+    ) -> str:
+        """Create 4 Tempers / Genre / Temper folder path and return temper folder ID."""
+        genre_folder_id = self.music_client.create_folder_in_folder(genre_label, root_folder_id)
+        temper_label = temperament.value.split(" ", 1)[0]
+        folder_id = self.music_client.create_folder_in_folder(temper_label, genre_folder_id)
+        logger.info(f"Folder for 4 Tempers / {genre_label} / {temper_label}: {folder_id}")
+        return folder_id
 
-        return folders
+    def _playlist_genre_label(self, playlist: Playlist) -> str:
+        """Use first available track genre for folder grouping."""
+        for track in playlist.tracks:
+            if track.genre:
+                return canonical_genre_label(track.genre)
+        return "Sonstige"
 
     def _save_results(self):
         """Save classification results using shared utilities"""

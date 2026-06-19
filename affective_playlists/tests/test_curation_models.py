@@ -93,7 +93,7 @@ def test_playlist_assignment_target_path_uses_canonical_genre_and_temperament():
         confidence=0.8,
     )
 
-    assert assignment.target_path() == ["Disco", "Malice"]
+    assert assignment.target_path() == ["4 Tempers", "Disco", "Malice"]
 
 
 def test_playlist_assignment_uses_shared_canonical_genres_for_tempers():
@@ -108,7 +108,7 @@ def test_playlist_assignment_uses_shared_canonical_genres_for_tempers():
     )
 
     assert assignment.to_dict()["genre_label"] == "Alternative & Indie"
-    assert assignment.target_path() == ["Alternative & Indie", "Woe"]
+    assert assignment.target_path() == ["4 Tempers", "Alternative & Indie", "Woe"]
 
 
 def test_assignment_serialization_rounds_confidence():

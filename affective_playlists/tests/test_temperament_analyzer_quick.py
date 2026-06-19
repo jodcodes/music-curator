@@ -24,6 +24,10 @@ from src.temperament_analyzer import (
 class MockMusicClient(MusicLibraryClient):
     """Mock music client for testing"""
 
+    def __init__(self):
+        self.created_folders = []
+        self.moves = []
+
     def authenticate(self) -> bool:
         print("✓ Mock authentication successful")
         return True
@@ -54,10 +58,17 @@ class MockMusicClient(MusicLibraryClient):
         ]
 
     def create_folder(self, folder_name: str) -> str:
+        self.created_folders.append((folder_name, None))
         print(f"✓ Mock folder created: {folder_name}")
         return f"mock_folder_{folder_name}"
 
+    def create_folder_in_folder(self, folder_name: str, parent_folder_id: str) -> str:
+        self.created_folders.append((folder_name, parent_folder_id))
+        print(f"✓ Mock nested folder created: {folder_name} in {parent_folder_id}")
+        return f"mock_folder_{parent_folder_id}_{folder_name}"
+
     def move_playlist_to_folder(self, playlist_id: str, folder_id: str) -> bool:
+        self.moves.append((playlist_id, folder_id))
         print(f"✓ Mock move: {playlist_id} → {folder_id}")
         return True
 
@@ -102,6 +113,19 @@ class MockLLMClient(LLMClient):
         return ClassificationResult(
             temperament=dominant, confidence=confidence, reasoning=f"Majority vote: {dict(counts)}"
         )
+
+
+def test_temperament_analyzer_creates_root_genre_temper_paths():
+    music_client = MockMusicClient()
+    llm_client = MockLLMClient()
+    analyzer = TemperamentAnalyzer(music_client, llm_client)
+
+    assert analyzer.analyze_and_organize(batch_size=5)
+
+    assert ("4 Tempers", None) in music_client.created_folders
+    assert ("Pop", "mock_folder_4 Tempers") in music_client.created_folders
+    assert ("Frolic", "mock_folder_mock_folder_4 Tempers_Pop") in music_client.created_folders
+    assert ("pl.002", "mock_folder_mock_folder_mock_folder_4 Tempers_Pop_Frolic") in music_client.moves
 
 
 def main():

@@ -8,6 +8,7 @@ from src.genre_groups import canonical_genre_label, display_genre_label
 
 
 FAV_ROOT_FOLDER = "Fav Songs"
+TEMPERS_ROOT_FOLDER = "4 Tempers"
 
 
 class TemperBucket(Enum):
@@ -59,7 +60,7 @@ class CurationAssignment:
                 fav_playlist_name(self.genre, self.temperament),
             ]
         genre_label = normalize_fav_genre_label(self.genre)
-        return [genre_label, self.temperament.value]
+        return [TEMPERS_ROOT_FOLDER, genre_label, self.temperament.value]
 
     def to_dict(self) -> dict[str, Any]:
         genre_label = normalize_fav_genre_label(self.genre)
