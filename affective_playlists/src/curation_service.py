@@ -105,6 +105,55 @@ class CurationService:
             "total_skipped": len(skipped_tracks),
         }
 
+    def preview_playlist_tempers(self, playlist_names: List[str]) -> Dict[str, Any]:
+        assignments: List[CurationAssignment] = []
+        skipped_tracks: List[Dict[str, str]] = []
+
+        for playlist_name in playlist_names:
+            tracks = self.apple_music.get_playlist_tracks(playlist_name) or []
+            for track in tracks:
+                item_id = str(track.get("persistent_id") or track.get("id") or "").strip()
+                item_name = str(track.get("name") or track.get("title") or "Unknown Track")
+                if not item_id:
+                    skipped_tracks.append(
+                        {
+                            "name": item_name,
+                            "artist": str(track.get("artist") or ""),
+                            "genre": str(track.get("genre") or ""),
+                            "source_playlist": playlist_name,
+                            "reason": "missing_stable_id",
+                        }
+                    )
+                    continue
+
+                raw_genre = str(track.get("genre") or "other").strip() or "other"
+                assignments.append(
+                    CurationAssignment(
+                        item_type=AssignmentType.TEMPER_TRACK,
+                        item_id=item_id,
+                        item_name=item_name,
+                        genre=raw_genre.lower().replace(" ", "_"),
+                        temperament=self.temper_classifier.classify_track(track),
+                        source=AssignmentSource.AUTO,
+                        confidence=0.75,
+                    )
+                )
+
+        changes = self.planner.plan_fav_tracks(assignments)
+        assignment_dicts = [assignment.to_dict() for assignment in assignments]
+
+        return {
+            "scope": "playlist_tempers",
+            "source_playlists": playlist_names,
+            "assignments": assignment_dicts,
+            "grouped": self._group_assignments(assignment_dicts),
+            "changes": [change.to_dict() for change in changes],
+            "total_assignments": len(assignments),
+            "total_changes": len(changes),
+            "skipped_tracks": skipped_tracks,
+            "total_skipped": len(skipped_tracks),
+        }
+
     def get_fav_songs_snapshot(self) -> Dict[str, Any]:
         return self.snapshot_store.load_snapshot("fav_songs")
 

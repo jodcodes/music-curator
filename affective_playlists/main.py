@@ -249,8 +249,8 @@ def run_playlist_organization(args=None):
 
 
 def run_curation(args=None):
-    """Run curation preview/apply for Favourite Songs."""
-    print_header("Curation", "Review and apply Favourite Songs structure")
+    """Run curation preview/apply."""
+    print_header("Curation", "Review playlist curation structure")
 
     if not require_macos("Curation"):
         return 1
@@ -281,14 +281,25 @@ def run_curation(args=None):
         print(info(f"leftovers: {result.get('leftovers', {})}"))
         return 1
 
-    preview = service.preview_fav_songs()
+    scope = getattr(args, "scope", "fav_songs") if args else "fav_songs"
+    if scope == "playlist_tempers":
+        playlist_names = list(getattr(args, "playlist", None) or [])
+        if not playlist_names:
+            print(error("Use --playlist at least once for playlist_tempers scope."))
+            return 1
+        preview = service.preview_playlist_tempers(playlist_names)
+        item_label = "Selected playlist tracks"
+    else:
+        preview = service.preview_fav_songs()
+        item_label = "Favourite tracks"
+
     print(
         info(
             "Preview only - no changes written. "
             "Use the UI mini-test and queued workflow to apply changes."
         )
     )
-    print(info(f"Favourite tracks: {preview['total_assignments']}"))
+    print(info(f"{item_label}: {preview['total_assignments']}"))
     print(info(f"Planned changes: {preview['total_changes']}"))
     if preview.get("total_skipped"):
         print(warning(f"Skipped tracks: {preview['total_skipped']}"))
@@ -361,9 +372,14 @@ def main(argv=None):
     curate_parser = add_feature_parser("curate", "Preview/apply Favourite Songs curation")
     curate_parser.add_argument(
         "--scope",
-        choices=["fav_songs"],
+        choices=["fav_songs", "playlist_tempers"],
         default="fav_songs",
         help="Curation scope",
+    )
+    curate_parser.add_argument(
+        "--playlist",
+        action="append",
+        help="Source playlist name for playlist_tempers scope. Repeatable.",
     )
     curate_parser.add_argument(
         "--apply",

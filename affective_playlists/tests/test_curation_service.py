@@ -160,6 +160,35 @@ class FakeAppleMusicInterface(AppleMusicInterface):
         return [{"title": "Track A", "persistent_id": "track-a"}]
 
 
+class SelectedPlaylistTracks:
+    def get_playlist_tracks(self, playlist_name):
+        assert playlist_name in {"Morning", "Night"}
+        return {
+            "Morning": [
+                {
+                    "persistent_id": "track-1",
+                    "name": "Happy House",
+                    "artist": "DJ A",
+                    "genre": "House",
+                },
+                {
+                    "persistent_id": "morning-2",
+                    "name": "Blue Jazz",
+                    "artist": "Artist B",
+                    "genre": "Jazz",
+                },
+            ],
+            "Night": [
+                {
+                    "persistent_id": "night-1",
+                    "name": "Dark Techno",
+                    "artist": "Artist C",
+                    "genre": "Techno",
+                }
+            ],
+        }[playlist_name]
+
+
 def test_fav_preview_builds_assignments_and_changes():
     service = CurationService(
         apple_music=FakeAppleMusic(),
@@ -180,6 +209,22 @@ def test_fav_preview_builds_assignments_and_changes():
     assert preview["grouped"]["Hip Hop & RnB"]["Frolic"][0]["item_id"] == "track-1"
     assert preview["grouped"]["Electronic"]["Dread"][0]["item_id"] == "track-2"
     assert preview["changes"][0]["action"] == "ensure_folder"
+
+
+def test_selected_playlist_temper_preview_splits_tracks_by_genre_and_temper():
+    service = CurationService(
+        apple_music=SelectedPlaylistTracks(),
+        temper_classifier=FakeTemperClassifier(),
+    )
+
+    preview = service.preview_playlist_tempers(["Morning", "Night"])
+
+    targets = [assignment["target_path"] for assignment in preview["assignments"]]
+    assert ["4 Tempers", "House", "House Frolic"] in targets
+    assert ["4 Tempers", "Jazz", "Jazz Dread"] in targets
+    assert ["4 Tempers", "Techno", "Techno Dread"] in targets
+    assert preview["source_playlists"] == ["Morning", "Night"]
+    assert preview["total_assignments"] == 3
 
 
 def test_fav_preview_uses_title_for_apple_music_track_names():

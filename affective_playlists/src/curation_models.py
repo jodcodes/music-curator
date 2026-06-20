@@ -21,6 +21,7 @@ class TemperBucket(Enum):
 class AssignmentType(Enum):
     PLAYLIST = "playlist"
     FAV_TRACK = "fav_track"
+    TEMPER_TRACK = "temper_track"
 
 
 class AssignmentSource(Enum):
@@ -60,6 +61,12 @@ class CurationAssignment:
                 fav_playlist_name(self.genre, self.temperament),
             ]
         genre_label = normalize_fav_genre_label(self.genre)
+        if self.item_type == AssignmentType.TEMPER_TRACK:
+            return [
+                TEMPERS_ROOT_FOLDER,
+                genre_label,
+                f"{genre_label} {self.temperament.value}",
+            ]
         return [TEMPERS_ROOT_FOLDER, genre_label, self.temperament.value]
 
     def to_dict(self) -> dict[str, Any]:
