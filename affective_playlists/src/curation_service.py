@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.apple_music import AppleMusicInterface
@@ -49,6 +51,7 @@ class CurationService:
         snapshot_store: Optional[CurationSnapshotStore] = None,
         planner: Optional[AppleMusicStructurePlanner] = None,
         applier: Optional[AppleMusicStructureApplier] = None,
+        sources_config_path: Optional[str | Path] = None,
     ) -> None:
         self.apple_music = apple_music or AppleMusicInterface()
         self.temper_classifier = temper_classifier or KeywordTemperClassifier()
@@ -56,6 +59,9 @@ class CurationService:
         self.snapshot_store = snapshot_store or CurationSnapshotStore()
         self.planner = planner or AppleMusicStructurePlanner()
         self.applier = applier or AppleMusicStructureApplier()
+        self.sources_config_path = Path(
+            sources_config_path or Path("data") / "config" / "curation_sources.json"
+        )
 
     def preview_fav_songs(self) -> Dict[str, Any]:
         tracks = self.apple_music.get_favourite_tracks()
@@ -105,7 +111,12 @@ class CurationService:
             "total_skipped": len(skipped_tracks),
         }
 
-    def preview_playlist_tempers(self, playlist_names: List[str]) -> Dict[str, Any]:
+    def preview_playlist_tempers(
+        self, playlist_names: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        if playlist_names is None:
+            playlist_names = self._load_temper_playlist_names()
+
         assignments: List[CurationAssignment] = []
         skipped_tracks: List[Dict[str, str]] = []
 
@@ -153,6 +164,12 @@ class CurationService:
             "skipped_tracks": skipped_tracks,
             "total_skipped": len(skipped_tracks),
         }
+
+    def _load_temper_playlist_names(self) -> List[str]:
+        if not self.sources_config_path.is_file():
+            return []
+        data = json.loads(self.sources_config_path.read_text(encoding="utf-8"))
+        return [str(name) for name in data.get("temper_playlists", []) if str(name).strip()]
 
     def get_fav_songs_snapshot(self) -> Dict[str, Any]:
         return self.snapshot_store.load_snapshot("fav_songs")

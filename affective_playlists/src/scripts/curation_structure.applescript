@@ -35,25 +35,35 @@ on ensureFolder(pathArgs)
 end ensureFolder
 
 on ensurePlaylist(pathArgs)
-    if (count of pathArgs) is not 3 then
-        return "ERROR: ensure_playlist requires root/genre/playlist path"
+    if (count of pathArgs) is 2 then
+        set rootName to item 1 of pathArgs
+        set playlistName to item 2 of pathArgs
+        my ensureRootPlaylist(rootName, playlistName)
+        return "SUCCESS: playlist ensured " & rootName & " / " & playlistName
     end if
-    set rootName to item 1 of pathArgs
-    set genreName to item 2 of pathArgs
-    set playlistName to item 3 of pathArgs
-    my ensureTargetPlaylist(rootName, genreName, playlistName)
-    return "SUCCESS: playlist ensured " & rootName & " / " & genreName & " / " & playlistName
+    if (count of pathArgs) is 3 then
+        set rootName to item 1 of pathArgs
+        set genreName to item 2 of pathArgs
+        set playlistName to item 3 of pathArgs
+        my ensureTargetPlaylist(rootName, genreName, playlistName)
+        return "SUCCESS: playlist ensured " & rootName & " / " & genreName & " / " & playlistName
+    end if
+    return "ERROR: ensure_playlist requires root/playlist or root/genre/playlist path"
 end ensurePlaylist
 
 on copyTrack(pathArgs)
-    if (count of pathArgs) is not 4 then
-        return "ERROR: copy_track requires track_id/root/genre/playlist path"
+    if (count of pathArgs) is not 3 and (count of pathArgs) is not 4 then
+        return "ERROR: copy_track requires track_id/root/playlist or track_id/root/genre/playlist path"
     end if
 
     set trackPID to item 1 of pathArgs
     set rootName to item 2 of pathArgs
-    set genreName to item 3 of pathArgs
-    set playlistName to item 4 of pathArgs
+    if (count of pathArgs) is 3 then
+        set playlistName to item 3 of pathArgs
+    else
+        set genreName to item 3 of pathArgs
+        set playlistName to item 4 of pathArgs
+    end if
 
     tell application "Music"
         set sourceTrack to my sourceTrackByPersistentID(trackPID)
@@ -61,7 +71,11 @@ on copyTrack(pathArgs)
             return "ERROR: source track not found: " & trackPID
         end if
 
-        set targetPlaylist to my ensureTargetPlaylist(rootName, genreName, playlistName)
+        if (count of pathArgs) is 3 then
+            set targetPlaylist to my ensureRootPlaylist(rootName, playlistName)
+        else
+            set targetPlaylist to my ensureTargetPlaylist(rootName, genreName, playlistName)
+        end if
         if my targetHasTrack(targetPlaylist, sourceTrack) then
             return "SUCCESS: track already exists in " & playlistName
         end if
@@ -70,6 +84,20 @@ on copyTrack(pathArgs)
         return "SUCCESS: track copied to " & playlistName
     end tell
 end copyTrack
+
+on ensureRootPlaylist(rootName, playlistName)
+    tell application "Music"
+        set rootFolder to my ensureRootFolder(rootName)
+        set matches to every user playlist of rootFolder whose name is playlistName
+        if (count of matches) > 1 then
+            error "Ambiguous playlist " & playlistName & " in " & rootName
+        end if
+        if (count of matches) is 1 then
+            return item 1 of matches
+        end if
+        return make new user playlist at rootFolder with properties {name:playlistName}
+    end tell
+end ensureRootPlaylist
 
 on ensureRootFolder(rootName)
     tell application "Music"

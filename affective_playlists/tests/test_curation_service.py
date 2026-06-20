@@ -198,8 +198,8 @@ def test_fav_preview_builds_assignments_and_changes():
     preview = service.preview_fav_songs()
 
     targets = [a["target_path"] for a in preview["assignments"]]
-    assert ["Fav Songs", "Hip Hop & RnB", "Fav Hip Hop & RnB Frolic"] in targets
-    assert ["Fav Songs", "Electronic", "Fav Electronic Dread"] in targets
+    assert ["Fav Songs", "Hip Hop & RnB"] in targets
+    assert ["Fav Songs", "Electronic"] in targets
     assert set(preview["grouped"]["Hip Hop & RnB"]) == {
         "Woe",
         "Frolic",
@@ -220,11 +220,26 @@ def test_selected_playlist_temper_preview_splits_tracks_by_genre_and_temper():
     preview = service.preview_playlist_tempers(["Morning", "Night"])
 
     targets = [assignment["target_path"] for assignment in preview["assignments"]]
-    assert ["4 Tempers", "House", "House Frolic"] in targets
-    assert ["4 Tempers", "Jazz", "Jazz Dread"] in targets
-    assert ["4 Tempers", "Techno", "Techno Dread"] in targets
+    assert ["4 Tempers", "House Frolic"] in targets
+    assert ["4 Tempers", "Jazz Dread"] in targets
+    assert ["4 Tempers", "Techno Dread"] in targets
     assert preview["source_playlists"] == ["Morning", "Night"]
     assert preview["total_assignments"] == 3
+
+
+def test_playlist_temper_preview_reads_configured_sources(tmp_path):
+    config_path = tmp_path / "curation_sources.json"
+    config_path.write_text('{"temper_playlists": ["Morning"]}', encoding="utf-8")
+    service = CurationService(
+        apple_music=SelectedPlaylistTracks(),
+        temper_classifier=FakeTemperClassifier(),
+        sources_config_path=config_path,
+    )
+
+    preview = service.preview_playlist_tempers()
+
+    assert preview["source_playlists"] == ["Morning"]
+    assert preview["total_assignments"] == 2
 
 
 def test_fav_preview_uses_title_for_apple_music_track_names():
@@ -239,7 +254,6 @@ def test_fav_preview_uses_title_for_apple_music_track_names():
     assert preview["assignments"][0]["target_path"] == [
         "Fav Songs",
         "Alternative & Indie",
-        "Fav Alternative & Indie Frolic",
     ]
 
 
@@ -267,23 +281,19 @@ def test_fav_preview_groups_requested_main_genres_once():
         "Techno",
     }
     targets = [assignment["target_path"] for assignment in preview["assignments"]]
-    assert ["Fav Songs", "Rock", "Fav Rock Frolic"] in targets
-    assert [
-        "Fav Songs",
-        "Alternative & Indie",
-        "Fav Alternative & Indie Frolic",
-    ] in targets
-    assert ["Fav Songs", "House", "Fav House Frolic"] in targets
-    assert ["Fav Songs", "Techno", "Fav Techno Frolic"] in targets
-    assert ["Fav Songs", "Breakbeat/Jungle", "Fav Breakbeat/Jungle Frolic"] in targets
-    assert ["Fav Songs", "IDM", "Fav IDM Frolic"] in targets
-    assert ["Fav Songs", "Disco", "Fav Disco Frolic"] in targets
-    assert ["Fav Songs", "Funk", "Fav Funk Frolic"] in targets
-    assert ["Fav Songs", "Soul", "Fav Soul Frolic"] in targets
-    assert ["Fav Songs", "Jazz", "Fav Jazz Frolic"] in targets
-    assert ["Fav Songs", "Blues", "Fav Blues Frolic"] in targets
-    assert ["Fav Songs", "Pop", "Fav Pop Frolic"] in targets
-    assert ["Fav Songs", "Lounge", "Fav Lounge Frolic"] in targets
+    assert ["Fav Songs", "Rock"] in targets
+    assert ["Fav Songs", "Alternative & Indie"] in targets
+    assert ["Fav Songs", "House"] in targets
+    assert ["Fav Songs", "Techno"] in targets
+    assert ["Fav Songs", "Breakbeat/Jungle"] in targets
+    assert ["Fav Songs", "IDM"] in targets
+    assert ["Fav Songs", "Disco"] in targets
+    assert ["Fav Songs", "Funk"] in targets
+    assert ["Fav Songs", "Soul"] in targets
+    assert ["Fav Songs", "Jazz"] in targets
+    assert ["Fav Songs", "Blues"] in targets
+    assert ["Fav Songs", "Pop"] in targets
+    assert ["Fav Songs", "Lounge"] in targets
 
 
 def test_fav_preview_skips_tracks_without_stable_id_and_reports_them():
@@ -423,6 +433,6 @@ def test_fav_preview_applies_store_overrides_over_auto_assignments(tmp_path):
     preview = service.preview_fav_songs()
 
     overridden = next(a for a in preview["assignments"] if a["item_id"] == "track-1")
-    assert overridden["target_path"] == ["Fav Songs", "Ambient", "Fav Ambient Woe"]
+    assert overridden["target_path"] == ["Fav Songs", "Ambient"]
     assert overridden["source"] == "manual"
     assert overridden["manual_override"] is True

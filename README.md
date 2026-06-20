@@ -31,6 +31,20 @@ cd affective_playlists
 python -m pytest tests/test_curation_models.py tests/test_curation_service.py tests/test_apple_music_structure.py -q
 ```
 
+Track curation targets are intentionally flat:
+
+```text
+Fav Songs / <Genre>
+4 Tempers / <Genre> <Temper>
+```
+
+Put source playlists for 4 Tempers in `affective_playlists/data/config/curation_sources.json`, then preview:
+
+```bash
+cd affective_playlists
+python main.py curate --scope playlist_tempers
+```
+
 Install dependencies inside each tool folder when needed:
 
 ```bash

@@ -62,19 +62,14 @@ def test_plan_creates_fav_folder_genre_folder_playlist_and_copy():
 
     assert AppleMusicChange("ensure_folder", ["Fav Songs"], "Ensure folder Fav Songs") in changes
     assert AppleMusicChange(
-        "ensure_folder",
-        ["Fav Songs", "Hip Hop & RnB"],
-        "Ensure folder Fav Songs / Hip Hop & RnB",
-    ) in changes
-    assert AppleMusicChange(
         "ensure_playlist",
-        ["Fav Songs", "Hip Hop & RnB", "Fav Hip Hop & RnB Frolic"],
-        "Ensure playlist Fav Hip Hop & RnB Frolic",
+        ["Fav Songs", "Hip Hop & RnB"],
+        "Ensure playlist Hip Hop & RnB",
     ) in changes
     assert AppleMusicChange(
         "copy_track",
-        ["1", "Fav Songs", "Hip Hop & RnB", "Fav Hip Hop & RnB Frolic"],
-        "Copy Track 1 to Fav Hip Hop & RnB Frolic",
+        ["1", "Fav Songs", "Hip Hop & RnB"],
+        "Copy Track 1 to Hip Hop & RnB",
     ) in changes
 
 
@@ -116,16 +111,10 @@ def test_plan_deduplicates_structural_changes_but_keeps_distinct_track_copies():
     ensure_root_folder = [
         c for c in changes if c.action == "ensure_folder" and c.path == ("Fav Songs",)
     ]
-    ensure_genre_folder = [
-        c
-        for c in changes
-        if c.action == "ensure_folder" and c.path == ("Fav Songs", "Hip Hop & RnB")
-    ]
     ensure_playlist = [c for c in changes if c.action == "ensure_playlist"]
     copy_track = [c for c in changes if c.action == "copy_track"]
 
     assert len(ensure_root_folder) == 1
-    assert len(ensure_genre_folder) == 1
     assert len(ensure_playlist) == 1
     assert len(copy_track) == 2
 

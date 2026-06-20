@@ -61,21 +61,28 @@ class AppleMusicStructurePlanner:
             }:
                 continue
 
-            root, genre_folder, playlist_name = assignment.target_path()
+            target_path = assignment.target_path()
+            root = target_path[0]
+            playlist_name = target_path[-1]
             add_change("ensure_folder", [root], f"Ensure folder {root}")
-            add_change(
-                "ensure_folder",
-                [root, genre_folder],
-                f"Ensure folder {root} / {genre_folder}",
-            )
+            if len(target_path) == 3:
+                genre_folder = target_path[1]
+                add_change(
+                    "ensure_folder",
+                    [root, genre_folder],
+                    f"Ensure folder {root} / {genre_folder}",
+                )
+                playlist_path = [root, genre_folder, playlist_name]
+            else:
+                playlist_path = [root, playlist_name]
             add_change(
                 "ensure_playlist",
-                [root, genre_folder, playlist_name],
+                playlist_path,
                 f"Ensure playlist {playlist_name}",
             )
             add_change(
                 "copy_track",
-                [assignment.item_id, root, genre_folder, playlist_name],
+                [assignment.item_id, *playlist_path],
                 f"Copy {assignment.item_name} to {playlist_name}",
             )
 

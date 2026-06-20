@@ -283,10 +283,7 @@ def run_curation(args=None):
 
     scope = getattr(args, "scope", "fav_songs") if args else "fav_songs"
     if scope == "playlist_tempers":
-        playlist_names = list(getattr(args, "playlist", None) or [])
-        if not playlist_names:
-            print(error("Use --playlist at least once for playlist_tempers scope."))
-            return 1
+        playlist_names = getattr(args, "playlist", None)
         preview = service.preview_playlist_tempers(playlist_names)
         item_label = "Selected playlist tracks"
     else:
