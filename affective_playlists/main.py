@@ -255,7 +255,9 @@ def run_curation(args=None):
     if not require_macos("Curation"):
         return 1
 
-    if args and getattr(args, "apply", False):
+    scope = getattr(args, "scope", "fav_songs") if args else "fav_songs"
+
+    if args and getattr(args, "apply", False) and scope != "playlist_tempers":
         print(
             error(
                 "Full apply is locked for the CLI in this phase. "
@@ -281,9 +283,18 @@ def run_curation(args=None):
         print(info(f"leftovers: {result.get('leftovers', {})}"))
         return 1
 
-    scope = getattr(args, "scope", "fav_songs") if args else "fav_songs"
     if scope == "playlist_tempers":
         playlist_names = getattr(args, "playlist", None)
+        if getattr(args, "apply", False):
+            if not getattr(args, "yes", False):
+                print(error("Use --yes with --apply for playlist_tempers."))
+                return 1
+            result = service.apply_playlist_tempers(playlist_names, confirmed=True)
+            print(success(f"Applied changes: {result.get('applied', 0)}"))
+            if result.get("failed"):
+                print(error(f"Failed changes: {result.get('failed', 0)}"))
+                return 1
+            return 0
         preview = service.preview_playlist_tempers(playlist_names)
         item_label = "Selected playlist tracks"
     else:
@@ -382,6 +393,11 @@ def main(argv=None):
         "--apply",
         action="store_true",
         help="Apply Favourite Songs curation changes",
+    )
+    curate_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Confirm playlist_tempers apply",
     )
     curate_parser.add_argument(
         "--smoke-test",

@@ -269,3 +269,21 @@ class CurationService:
         result = self.applier.apply_changes(changes, confirmed=confirmed)
         result["preview"] = preview
         return result
+
+    def apply_playlist_tempers(
+        self, playlist_names: Optional[List[str]] = None, confirmed: bool = False
+    ) -> Dict[str, Any]:
+        preview = self.preview_playlist_tempers(playlist_names)
+        assignments = [
+            CurationAssignment.from_dict(assignment)
+            for assignment in preview["assignments"]
+        ]
+        changes = self.planner.plan_fav_tracks(assignments)
+        preview = {
+            **preview,
+            "changes": [change.to_dict() for change in changes],
+            "total_changes": len(changes),
+        }
+        result = self.applier.apply_changes(changes, confirmed=confirmed)
+        result["preview"] = preview
+        return result

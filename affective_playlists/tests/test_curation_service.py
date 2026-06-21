@@ -371,6 +371,22 @@ def test_apply_fav_songs_can_limit_tracks_for_small_apply():
     assert copy_changes[0].path[0] == "track-1"
 
 
+def test_apply_playlist_tempers_delegates_to_applier():
+    applier = FakeApplier()
+    service = CurationService(
+        apple_music=SelectedPlaylistTracks(),
+        temper_classifier=FakeTemperClassifier(),
+        applier=applier,
+    )
+
+    result = service.apply_playlist_tempers(["Morning"], confirmed=True)
+
+    changes, confirmed = applier.calls[0]
+    assert confirmed is True
+    assert result["preview"]["source_playlists"] == ["Morning"]
+    assert any(change.action == "copy_track" for change in changes)
+
+
 def test_mini_test_uses_first_favourite_track_and_reports_cleanup():
     applier = MiniTestApplier()
     service = CurationService(
