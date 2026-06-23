@@ -253,14 +253,21 @@ class CurationService:
         return grouped
 
     def apply_fav_songs(
-        self, confirmed: bool, max_tracks: Optional[int] = None
+        self,
+        confirmed: bool,
+        max_tracks: Optional[int] = None,
+        offset: int = 0,
     ) -> Dict[str, Any]:
         if max_tracks is not None and max_tracks < 1:
             raise ValueError("max_tracks must be a positive integer")
+        if offset < 0:
+            raise ValueError("offset must be zero or positive")
 
         preview = self.preview_fav_songs()
         preview_changes = list(preview["changes"])
         assignment_dicts = list(preview["assignments"])
+        if offset:
+            assignment_dicts = assignment_dicts[offset:]
         if max_tracks is not None:
             assignment_dicts = assignment_dicts[:max_tracks]
 
@@ -277,6 +284,8 @@ class CurationService:
             "total_assignments": len(assignments),
             "total_changes": len(changes),
         }
+        if offset:
+            preview["offset"] = offset
         if max_tracks is not None:
             preview["max_tracks"] = max_tracks
         else:

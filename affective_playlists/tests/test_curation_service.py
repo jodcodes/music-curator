@@ -412,6 +412,26 @@ def test_apply_fav_songs_can_limit_tracks_for_small_apply():
     assert copy_changes[0].path[0] == "track-1"
 
 
+def test_apply_fav_songs_can_offset_limited_batches():
+    applier = FakeApplier()
+    service = CurationService(
+        apple_music=FakeAppleMusic(),
+        temper_classifier=FakeTemperClassifier(),
+        applier=applier,
+    )
+
+    result = service.apply_fav_songs(confirmed=True, max_tracks=1, offset=1)
+
+    changes, confirmed = applier.calls[0]
+    copy_changes = [change for change in changes if change.action == "copy_track"]
+    assert confirmed is True
+    assert result["preview"]["offset"] == 1
+    assert result["preview"]["max_tracks"] == 1
+    assert result["preview"]["assignments"][0]["item_id"] == "track-2"
+    assert len(copy_changes) == 1
+    assert copy_changes[0].path[0] == "track-2"
+
+
 def test_apply_playlist_tempers_delegates_to_applier():
     applier = FakeApplier()
     service = CurationService(

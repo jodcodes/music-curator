@@ -297,7 +297,11 @@ def run_curation(args=None):
             if not getattr(args, "yes", False):
                 print(error("Use --yes with --apply for fav_songs."))
                 return 1
-            result = service.apply_fav_songs(confirmed=True)
+            result = service.apply_fav_songs(
+                confirmed=True,
+                max_tracks=getattr(args, "limit", None),
+                offset=getattr(args, "offset", 0) or 0,
+            )
             print(success(f"Applied changes: {result.get('applied', 0)}"))
             if result.get("failed"):
                 print(error(f"Failed changes: {result.get('failed', 0)}"))
@@ -402,7 +406,18 @@ def main(argv=None):
     curate_parser.add_argument(
         "--yes",
         action="store_true",
-        help="Confirm playlist_tempers apply",
+        help="Confirm apply",
+    )
+    curate_parser.add_argument(
+        "--limit",
+        type=int,
+        help="Limit fav_songs apply to this many tracks",
+    )
+    curate_parser.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Skip this many fav_songs tracks before applying",
     )
     curate_parser.add_argument(
         "--smoke-test",
