@@ -56,6 +56,14 @@ class FakeApplier:
         }
 
 
+class SuccessfulFakeApplier(FakeApplier):
+    def apply_changes(self, changes, confirmed):
+        result = super().apply_changes(changes, confirmed)
+        result["success"] = True
+        result["applied"] = len(result.get("preview", []) or list(changes))
+        return result
+
+
 class MiniTestAppleMusic:
     def get_favourite_tracks(self):
         return [
@@ -430,6 +438,27 @@ def test_apply_fav_songs_can_offset_limited_batches():
     assert result["preview"]["assignments"][0]["item_id"] == "track-2"
     assert len(copy_changes) == 1
     assert copy_changes[0].path[0] == "track-2"
+
+
+def test_apply_fav_songs_batched_reuses_one_preview_for_multiple_batches():
+    applier = SuccessfulFakeApplier()
+    apple_music = FakeAppleMusic()
+    service = CurationService(
+        apple_music=apple_music,
+        temper_classifier=FakeTemperClassifier(),
+        applier=applier,
+    )
+
+    result = service.apply_fav_songs_batched(confirmed=True, batch_size=1)
+
+    assert result["success"] is True
+    assert result["processed_tracks"] == 2
+    assert [batch["offset"] for batch in result["batches"]] == [0, 1]
+    assert len(applier.calls) == 2
+    first_changes = [change for change in applier.calls[0][0] if change.action == "copy_track"]
+    second_changes = [change for change in applier.calls[1][0] if change.action == "copy_track"]
+    assert first_changes[0].path[0] == "track-1"
+    assert second_changes[0].path[0] == "track-2"
 
 
 def test_apply_playlist_tempers_delegates_to_applier():

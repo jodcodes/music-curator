@@ -264,6 +264,20 @@ class CurationService:
             raise ValueError("offset must be zero or positive")
 
         preview = self.preview_fav_songs()
+        return self._apply_fav_songs_preview(
+            preview,
+            confirmed=confirmed,
+            max_tracks=max_tracks,
+            offset=offset,
+        )
+
+    def _apply_fav_songs_preview(
+        self,
+        preview: Dict[str, Any],
+        confirmed: bool,
+        max_tracks: Optional[int] = None,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
         preview_changes = list(preview["changes"])
         assignment_dicts = list(preview["assignments"])
         if offset:
@@ -305,6 +319,74 @@ class CurationService:
         result = self.applier.apply_changes(changes, confirmed=confirmed)
         result["preview"] = preview
         return result
+
+    def apply_fav_songs_batched(
+        self,
+        confirmed: bool,
+        batch_size: int,
+        offset: int = 0,
+        max_tracks: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        if batch_size < 1:
+            raise ValueError("batch_size must be a positive integer")
+        if offset < 0:
+            raise ValueError("offset must be zero or positive")
+        if max_tracks is not None and max_tracks < 1:
+            raise ValueError("max_tracks must be a positive integer")
+
+        preview = self.preview_fav_songs()
+        total_available = len(preview["assignments"])
+        remaining = total_available - offset
+        if max_tracks is not None:
+            remaining = min(remaining, max_tracks)
+        remaining = max(0, remaining)
+
+        batches: List[Dict[str, Any]] = []
+        applied = 0
+        failed = 0
+        current_offset = offset
+        processed = 0
+
+        while processed < remaining:
+            current_size = min(batch_size, remaining - processed)
+            result = self._apply_fav_songs_preview(
+                preview,
+                confirmed=confirmed,
+                max_tracks=current_size,
+                offset=current_offset,
+            )
+            batch = {
+                "offset": current_offset,
+                "limit": current_size,
+                "success": bool(result.get("success")),
+                "applied": int(result.get("applied") or 0),
+                "failed": int(result.get("failed") or 0),
+            }
+            batches.append(batch)
+            applied += batch["applied"]
+            failed += batch["failed"]
+            if not batch["success"]:
+                return {
+                    "success": False,
+                    "applied": applied,
+                    "failed": failed,
+                    "processed_tracks": processed,
+                    "total_available": total_available,
+                    "batches": batches,
+                    "error": "Batch failed",
+                    "failed_result": result,
+                }
+            processed += current_size
+            current_offset += current_size
+
+        return {
+            "success": True,
+            "applied": applied,
+            "failed": failed,
+            "processed_tracks": processed,
+            "total_available": total_available,
+            "batches": batches,
+        }
 
     def apply_playlist_tempers(
         self, playlist_names: Optional[List[str]] = None, confirmed: bool = False
