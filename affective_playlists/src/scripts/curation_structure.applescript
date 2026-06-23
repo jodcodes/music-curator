@@ -13,6 +13,8 @@ on run argv
             return my ensurePlaylist(pathArgs)
         else if actionName is "copy_track" then
             return my copyTrack(pathArgs)
+        else if actionName is "remove_track" then
+            return my removeTrack(pathArgs)
         end if
         return "ERROR: unsupported action: " & actionName
     on error errMsg
@@ -85,6 +87,34 @@ on copyTrack(pathArgs)
     end tell
 end copyTrack
 
+on removeTrack(pathArgs)
+    if (count of pathArgs) is not 3 then
+        return "ERROR: remove_track requires track_id/root/playlist path"
+    end if
+
+    set trackPID to item 1 of pathArgs
+    set rootName to item 2 of pathArgs
+    set playlistName to item 3 of pathArgs
+    if rootName is not "Fav Songs" then
+        return "ERROR: remove_track is only allowed under Fav Songs"
+    end if
+
+    tell application "Music"
+        set targetPlaylist to my findUniqueRootPlaylist(playlistName, rootName)
+        if targetPlaylist is missing value then
+            return "SUCCESS: playlist missing, nothing to remove from " & playlistName
+        end if
+        set matches to every track of targetPlaylist whose persistent ID is trackPID
+        if (count of matches) is 0 then
+            return "SUCCESS: track already absent from " & playlistName
+        end if
+        repeat with staleTrack in matches
+            delete staleTrack
+        end repeat
+        return "SUCCESS: removed " & (count of matches) & " stale track(s) from " & playlistName
+    end tell
+end removeTrack
+
 on ensureRootPlaylist(rootName, playlistName)
     tell application "Music"
         set rootFolder to my ensureRootFolder(rootName)
@@ -123,6 +153,20 @@ on ensureRootFolder(rootName)
         end repeat
     end tell
 end ensureRootFolder
+
+on findUniqueRootPlaylist(playlistName, rootName)
+    tell application "Music"
+        set rootFolder to my ensureRootFolder(rootName)
+        set matches to every user playlist of rootFolder whose name is playlistName
+        if (count of matches) > 1 then
+            error "Ambiguous playlist " & rootName & " / " & playlistName
+        end if
+        if (count of matches) is 1 then
+            return item 1 of matches
+        end if
+    end tell
+    return missing value
+end findUniqueRootPlaylist
 
 on ensureGenreFolder(rootName, genreName)
     tell application "Music"

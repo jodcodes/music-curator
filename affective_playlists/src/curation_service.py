@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from src.apple_music import AppleMusicInterface
 from src.apple_music_structure import (
+    AppleMusicChange,
     AppleMusicStructureApplier,
     AppleMusicStructurePlanner,
 )
@@ -97,6 +98,12 @@ class CurationService:
 
         assignments = self.store.apply_overrides(assignments)
         changes = self.planner.plan_fav_tracks(assignments)
+        desired_track_ids = [assignment.item_id for assignment in assignments]
+        existing_tracks = self._get_generated_fav_song_tracks()
+        stale_changes = self.planner.plan_stale_fav_track_removals(
+            existing_tracks, desired_track_ids
+        )
+        changes.extend(stale_changes)
 
         assignment_dicts = [assignment.to_dict() for assignment in assignments]
         grouped = self._group_assignments(assignment_dicts)
@@ -164,6 +171,12 @@ class CurationService:
             "skipped_tracks": skipped_tracks,
             "total_skipped": len(skipped_tracks),
         }
+
+    def _get_generated_fav_song_tracks(self) -> List[Dict[str, Any]]:
+        getter = getattr(self.apple_music, "get_generated_fav_song_tracks", None)
+        if type(self.apple_music) is not AppleMusicInterface:
+            return [] if getter is None else list(getter())
+        return self.apple_music.get_generated_fav_song_tracks()
 
     def _load_temper_playlist_names(self) -> List[str]:
         if not self.sources_config_path.is_file():
@@ -246,6 +259,7 @@ class CurationService:
             raise ValueError("max_tracks must be a positive integer")
 
         preview = self.preview_fav_songs()
+        preview_changes = list(preview["changes"])
         assignment_dicts = list(preview["assignments"])
         if max_tracks is not None:
             assignment_dicts = assignment_dicts[:max_tracks]
@@ -265,6 +279,19 @@ class CurationService:
         }
         if max_tracks is not None:
             preview["max_tracks"] = max_tracks
+        else:
+            remove_changes = [
+                AppleMusicChange(
+                    str(change["action"]),
+                    list(change["path"]),
+                    str(change["description"]),
+                )
+                for change in preview_changes
+                if change.get("action") == "remove_track"
+            ]
+            changes.extend(remove_changes)
+            preview["changes"] = [change.to_dict() for change in changes]
+            preview["total_changes"] = len(changes)
 
         result = self.applier.apply_changes(changes, confirmed=confirmed)
         result["preview"] = preview

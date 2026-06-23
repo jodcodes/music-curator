@@ -60,10 +60,10 @@ class AppleMusicInterface:
                 text=True,
             )
             try:
-                stdout, stderr = process.communicate(input=script, timeout=120)
+                stdout, stderr = process.communicate(input=script, timeout=300)
             except subprocess.TimeoutExpired:
                 process.kill()
-                return False, "AppleScript execution timed out after 120s"
+                return False, "AppleScript execution timed out after 300s"
 
             if process.returncode != 0:
                 return False, stderr
@@ -252,6 +252,93 @@ end tell
             self._normalize_track_dict(track)
             for track in self._get_favourite_songs_tracks()
         ]
+
+    def get_generated_fav_song_tracks(self) -> List[Dict]:
+        """Return tracks currently in generated Fav Songs / <Genre> playlists."""
+        return self._get_generated_root_playlist_tracks("Fav Songs")
+
+    def _get_generated_root_playlist_tracks(self, root_name: str) -> List[Dict]:
+        script = f'''
+on cleanText(rawValue)
+    try
+        set textValue to rawValue as text
+    on error
+        set textValue to ""
+    end try
+    set textValue to my replaceText(tab, " ", textValue)
+    set textValue to my replaceText(linefeed, " ", textValue)
+    set textValue to my replaceText(return, " ", textValue)
+    return textValue
+end cleanText
+
+on replaceText(findText, replaceTextValue, sourceText)
+    set oldDelimiters to AppleScript's text item delimiters
+    set AppleScript's text item delimiters to findText
+    set textItems to text items of sourceText
+    set AppleScript's text item delimiters to replaceTextValue
+    set sourceText to textItems as text
+    set AppleScript's text item delimiters to oldDelimiters
+    return sourceText
+end replaceText
+
+tell application "Music"
+    set trackRows to {{}}
+    set rootName to "{root_name}"
+    set oldDelimiters to AppleScript's text item delimiters
+    try
+        set rootMatches to every folder playlist whose name is rootName
+        if (count of rootMatches) is 0 then return ""
+        if (count of rootMatches) > 1 then error "Ambiguous root folder " & rootName
+        set rootFolder to item 1 of rootMatches
+        repeat with targetPlaylist in every user playlist of rootFolder
+            set playlistName to name of targetPlaylist
+            set trackTotal to count of tracks of targetPlaylist
+            if trackTotal > 0 then
+                set trackIDs to persistent ID of every track of targetPlaylist
+                set trackNames to name of every track of targetPlaylist
+                set trackArtists to artist of every track of targetPlaylist
+                repeat with trackIndex from 1 to trackTotal
+                    set trackPID to my cleanText(item trackIndex of trackIDs)
+                    set trackName to my cleanText(item trackIndex of trackNames)
+                    set trackArtist to my cleanText(item trackIndex of trackArtists)
+                    set AppleScript's text item delimiters to tab
+                    set end of trackRows to {{trackPID, trackName, trackArtist, playlistName}} as text
+                end repeat
+            end if
+        end repeat
+        set AppleScript's text item delimiters to linefeed
+        set outputText to trackRows as text
+        set AppleScript's text item delimiters to oldDelimiters
+        return outputText
+    on error errMsg
+        set AppleScript's text item delimiters to oldDelimiters
+        error errMsg
+    end try
+end tell
+'''
+        success, output = self._run_applescript(script)
+        if not success:
+            raise RuntimeError(f"Failed to load generated {root_name} tracks: {output}")
+        if not output:
+            return []
+        tracks: List[Dict] = []
+        for row in output.splitlines():
+            fields = row.split("\t")
+            if len(fields) < 4:
+                fields.extend([""] * (4 - len(fields)))
+            persistent_id, name, artist, playlist = fields[:4]
+            tracks.append(
+                self._normalize_track_dict(
+                    {
+                        "persistent_id": persistent_id,
+                        "title": name,
+                        "name": name,
+                        "artist": artist,
+                        "target_playlist": playlist,
+                    }
+                )
+            )
+        return tracks
 
     def _get_favourite_songs_tracks(self) -> List[Dict]:
         """Get only the Favourite Songs fields needed for curation preview."""

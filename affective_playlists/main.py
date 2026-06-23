@@ -257,13 +257,8 @@ def run_curation(args=None):
 
     scope = getattr(args, "scope", "fav_songs") if args else "fav_songs"
 
-    if args and getattr(args, "apply", False) and scope != "playlist_tempers":
-        print(
-            error(
-                "Full apply is locked for the CLI in this phase. "
-                "Use the UI mini-test and queued workflow instead."
-            )
-        )
+    if args and getattr(args, "apply", False) and scope not in {"playlist_tempers", "fav_songs"}:
+        print(error(f"Unsupported apply scope: {scope}"))
         return 1
 
     from src.curation_service import CurationService
@@ -298,6 +293,16 @@ def run_curation(args=None):
         preview = service.preview_playlist_tempers(playlist_names)
         item_label = "Selected playlist tracks"
     else:
+        if getattr(args, "apply", False):
+            if not getattr(args, "yes", False):
+                print(error("Use --yes with --apply for fav_songs."))
+                return 1
+            result = service.apply_fav_songs(confirmed=True)
+            print(success(f"Applied changes: {result.get('applied', 0)}"))
+            if result.get("failed"):
+                print(error(f"Failed changes: {result.get('failed', 0)}"))
+                return 1
+            return 0
         preview = service.preview_fav_songs()
         item_label = "Favourite tracks"
 

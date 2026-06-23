@@ -88,6 +88,33 @@ class AppleMusicStructurePlanner:
 
         return changes
 
+    def plan_stale_fav_track_removals(
+        self, existing_tracks: Iterable[dict[str, Any]], desired_track_ids: Iterable[str]
+    ) -> list[AppleMusicChange]:
+        desired = {str(track_id).strip() for track_id in desired_track_ids if str(track_id).strip()}
+        changes: list[AppleMusicChange] = []
+        seen: set[tuple[str, str]] = set()
+
+        for track in existing_tracks:
+            track_id = str(track.get("persistent_id") or track.get("id") or "").strip()
+            playlist_name = str(track.get("target_playlist") or "").strip()
+            if not track_id or not playlist_name or track_id in desired:
+                continue
+            key = (track_id, playlist_name)
+            if key in seen:
+                continue
+            seen.add(key)
+            item_name = str(track.get("name") or track.get("title") or track_id)
+            changes.append(
+                AppleMusicChange(
+                    "remove_track",
+                    [track_id, "Fav Songs", playlist_name],
+                    f"Remove stale {item_name} from {playlist_name}",
+                )
+            )
+
+        return changes
+
 
 class AppleMusicStructureApplier:
     def __init__(self, script_path: str | None = None) -> None:

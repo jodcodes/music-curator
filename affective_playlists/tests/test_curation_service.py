@@ -94,6 +94,24 @@ class TracksWithoutStableId:
         ]
 
 
+class AppleMusicWithGeneratedFavTracks(FakeAppleMusic):
+    def get_generated_fav_song_tracks(self):
+        return [
+            {
+                "persistent_id": "track-1",
+                "name": "Track A",
+                "artist": "Artist A",
+                "target_playlist": "Hip Hop & RnB",
+            },
+            {
+                "persistent_id": "stale-track",
+                "name": "Old Track",
+                "artist": "Artist Old",
+                "target_playlist": "Hip Hop & RnB",
+            },
+        ]
+
+
 class AppleMusicLikeTracks:
     def get_favourite_tracks(self):
         return [
@@ -158,6 +176,9 @@ class FakeAppleMusicInterface(AppleMusicInterface):
     def get_favourite_tracks(self):
         self.requested_favourite_tracks += 1
         return [{"title": "Track A", "persistent_id": "track-a"}]
+
+    def get_generated_fav_song_tracks(self):
+        return []
 
 
 class SelectedPlaylistTracks:
@@ -294,6 +315,26 @@ def test_fav_preview_groups_requested_main_genres_once():
     assert ["Fav Songs", "Blues"] in targets
     assert ["Fav Songs", "Pop"] in targets
     assert ["Fav Songs", "Lounge"] in targets
+
+
+def test_fav_preview_plans_stale_generated_track_removals():
+    service = CurationService(
+        apple_music=AppleMusicWithGeneratedFavTracks(),
+        temper_classifier=FakeTemperClassifier(),
+    )
+
+    preview = service.preview_fav_songs()
+
+    remove_changes = [
+        change for change in preview["changes"] if change["action"] == "remove_track"
+    ]
+    assert remove_changes == [
+        {
+            "action": "remove_track",
+            "path": ["stale-track", "Fav Songs", "Hip Hop & RnB"],
+            "description": "Remove stale Old Track from Hip Hop & RnB",
+        }
+    ]
 
 
 def test_fav_preview_skips_tracks_without_stable_id_and_reports_them():

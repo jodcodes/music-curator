@@ -89,6 +89,28 @@ def test_plan_deduplicates_folder_and_playlist_changes():
     assert len(copy_track) == 2
 
 
+def test_plan_stale_fav_track_removals_only_removes_existing_non_desired_tracks():
+    planner = AppleMusicStructurePlanner()
+
+    changes = planner.plan_stale_fav_track_removals(
+        [
+            {"persistent_id": "keep", "name": "Keep", "target_playlist": "Rock"},
+            {"persistent_id": "stale", "name": "Stale", "target_playlist": "Rock"},
+            {"persistent_id": "stale", "name": "Stale", "target_playlist": "Rock"},
+            {"persistent_id": "missing-playlist", "name": "No Playlist"},
+        ],
+        ["keep"],
+    )
+
+    assert changes == [
+        AppleMusicChange(
+            "remove_track",
+            ["stale", "Fav Songs", "Rock"],
+            "Remove stale Stale from Rock",
+        )
+    ]
+
+
 def test_plan_ignores_non_fav_track_assignments():
     planner = AppleMusicStructurePlanner()
 
@@ -439,6 +461,16 @@ def test_applier_smoke_test_classifies_copy_results_from_copy_stdout(tmp_path):
     assert result["success"] is False
     assert result["copied"] == 0
     assert result["duplicate_skipped"] is False
+
+
+def test_applescript_remove_track_is_limited_to_fav_songs_root():
+    script = Path("src/scripts/curation_structure.applescript").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'actionName is "remove_track"' in script
+    assert 'if rootName is not "Fav Songs" then' in script
+    assert 'remove_track is only allowed under Fav Songs' in script
 
 
 def test_applescript_copy_track_searches_favourite_songs_before_library():
