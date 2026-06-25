@@ -320,6 +320,34 @@ class CurationService:
         result["preview"] = preview
         return result
 
+    def apply_fav_songs_bulk(
+        self,
+        confirmed: bool,
+        offset: int = 0,
+        max_tracks: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        if offset < 0:
+            raise ValueError("offset must be zero or positive")
+        if max_tracks is not None and max_tracks < 1:
+            raise ValueError("max_tracks must be a positive integer")
+
+        preview = self.preview_fav_songs()
+        assignment_dicts = list(preview["assignments"])
+        if offset:
+            assignment_dicts = assignment_dicts[offset:]
+        if max_tracks is not None:
+            assignment_dicts = assignment_dicts[:max_tracks]
+        assignments = [CurationAssignment.from_dict(item) for item in assignment_dicts]
+        result = self.applier.apply_fav_tracks_bulk(assignments, confirmed=confirmed)
+        result["preview"] = {
+            **preview,
+            "assignments": assignment_dicts,
+            "total_assignments": len(assignments),
+            "offset": offset,
+            "max_tracks": max_tracks,
+        }
+        return result
+
     def apply_fav_songs_batched(
         self,
         confirmed: bool,

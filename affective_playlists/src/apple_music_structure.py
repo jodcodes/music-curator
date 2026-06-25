@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import tempfile
 import uuid
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -203,6 +204,71 @@ class AppleMusicStructureApplier:
             "applied": applied,
             "failed": failed,
             "errors": errors,
+        }
+
+    def apply_fav_tracks_bulk(
+        self, assignments: Iterable[CurationAssignment], confirmed: bool
+    ) -> dict[str, Any]:
+        if not confirmed:
+            return {"success": False, "error": "Confirmation required", "applied": 0, "failed": 0}
+
+        rows: list[tuple[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for assignment in assignments:
+            if assignment.item_type is not AssignmentType.FAV_TRACK:
+                continue
+            target_path = assignment.target_path()
+            if len(target_path) != 2 or target_path[0] != "Fav Songs":
+                continue
+            key = (assignment.item_id, target_path[1])
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(key)
+
+        if not rows:
+            return {"success": True, "applied": 0, "failed": 0, "stdout": ""}
+
+        script_path = Path(__file__).parent / "scripts" / "bulk_fav_songs.applescript"
+        if not script_path.is_file():
+            return {"success": False, "error": f"Script not found: {script_path}", "applied": 0, "failed": 0}
+
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+            data_path = Path(handle.name)
+            for track_id, playlist_name in rows:
+                safe_playlist = playlist_name.replace("\t", " ").replace("\n", " ")
+                handle.write(f"{track_id}\t{safe_playlist}\n")
+
+        try:
+            result = subprocess.run(
+                ["osascript", str(script_path), str(data_path)],
+                capture_output=True,
+                text=True,
+                timeout=900,
+            )
+        except subprocess.TimeoutExpired as exc:
+            return {
+                "success": False,
+                "applied": 0,
+                "failed": len(rows),
+                "stdout": _strip_process_output(exc.output),
+                "stderr": _strip_process_output(exc.stderr) or str(exc),
+            }
+        finally:
+            try:
+                data_path.unlink()
+            except OSError:
+                pass
+
+        stdout = _strip_process_output(result.stdout)
+        stderr = _strip_process_output(result.stderr)
+        success = result.returncode == 0 and stdout.startswith("SUCCESS")
+        return {
+            "success": success,
+            "applied": len(rows) if success else 0,
+            "failed": 0 if success else len(rows),
+            "stdout": stdout,
+            "stderr": stderr,
         }
 
     def run_smoke_test(

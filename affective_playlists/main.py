@@ -298,7 +298,14 @@ def run_curation(args=None):
                 print(error("Use --yes with --apply for fav_songs."))
                 return 1
             batch_size = getattr(args, "batch_size", None)
-            if batch_size:
+            if getattr(args, "bulk", False):
+                result = service.apply_fav_songs_bulk(
+                    confirmed=True,
+                    max_tracks=getattr(args, "limit", None),
+                    offset=getattr(args, "offset", 0) or 0,
+                )
+                print(success(f"Bulk applied: {result.get('stdout', '')}"))
+            elif batch_size:
                 result = service.apply_fav_songs_batched(
                     confirmed=True,
                     batch_size=batch_size,
@@ -434,6 +441,11 @@ def main(argv=None):
         "--batch-size",
         type=int,
         help="Apply fav_songs in internal batches after one preview scan",
+    )
+    curate_parser.add_argument(
+        "--bulk",
+        action="store_true",
+        help="Apply fav_songs through one bulk AppleScript call",
     )
     curate_parser.add_argument(
         "--smoke-test",

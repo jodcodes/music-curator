@@ -44,6 +44,7 @@ class StaticTemperClassifier:
 class FakeApplier:
     def __init__(self):
         self.calls = []
+        self.bulk_calls = []
 
     def apply_changes(self, changes, confirmed):
         changes = list(changes)
@@ -53,6 +54,16 @@ class FakeApplier:
             "applied": 0,
             "failed": 0,
             "confirmed": confirmed,
+        }
+
+    def apply_fav_tracks_bulk(self, assignments, confirmed):
+        assignments = list(assignments)
+        self.bulk_calls.append((assignments, confirmed))
+        return {
+            "success": True,
+            "applied": len(assignments),
+            "failed": 0,
+            "stdout": "SUCCESS copied=1 skipped=0 missing=0",
         }
 
 
@@ -438,6 +449,23 @@ def test_apply_fav_songs_can_offset_limited_batches():
     assert result["preview"]["assignments"][0]["item_id"] == "track-2"
     assert len(copy_changes) == 1
     assert copy_changes[0].path[0] == "track-2"
+
+
+def test_apply_fav_songs_bulk_delegates_assignments_to_bulk_applier():
+    applier = FakeApplier()
+    service = CurationService(
+        apple_music=FakeAppleMusic(),
+        temper_classifier=FakeTemperClassifier(),
+        applier=applier,
+    )
+
+    result = service.apply_fav_songs_bulk(confirmed=True, max_tracks=1, offset=1)
+
+    assignments, confirmed = applier.bulk_calls[0]
+    assert confirmed is True
+    assert result["success"] is True
+    assert result["applied"] == 1
+    assert assignments[0].item_id == "track-2"
 
 
 def test_apply_fav_songs_batched_reuses_one_preview_for_multiple_batches():
