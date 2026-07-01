@@ -1,8 +1,8 @@
 # 🎵 Music Tools
 
-Part of the top-level `music-curator` repo. This folder is for small local maintenance scripts. Keep scripts standalone until repeated use proves they should become package code.
+Legacy script home for the bundled maintenance commands that now ship through `affective_playlists tools`.
 
-Konsolidiertes Repo für alle Apple-Music-Automatisierungen.
+The scripts stay standalone JXA files, but the product surface is unified in `affective_playlists`.
 
 ## Was läuft
 

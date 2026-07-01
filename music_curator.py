@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent
 
 TOOLS = {
     "affective": (
-        "4tempers, Fav Songs curation, metadata, playlist organization",
+        "4tempers, Fav Songs curation, metadata, playlist organization, bundled music tools",
         ROOT / "affective_playlists",
         ["python3", "main.py"],
     ),
@@ -21,9 +21,9 @@ TOOLS = {
         ["python3", "sync_playlists.py"],
     ),
     "music-tools": (
-        "local Apple Music maintenance scripts",
-        ROOT / "music_tools",
-        ["bash", "bin/run_all.sh"],
+        "alias for affective_playlists tools",
+        ROOT / "affective_playlists",
+        ["python3", "main.py", "tools"],
     ),
 }
 

@@ -38,7 +38,7 @@ def normalize_fav_genre_label(genre: str) -> str:
 
 
 def fav_playlist_name(genre: str, temperament: TemperBucket) -> str:
-    return f"Fav {normalize_fav_genre_label(genre)} {temperament.value}"
+    return f"Fav {normalize_fav_genre_label(genre)}"
 
 
 def temper_playlist_name(genre: str, temperament: TemperBucket) -> str:
@@ -61,7 +61,7 @@ class CurationAssignment:
             genre_label = normalize_fav_genre_label(self.genre)
             return [
                 FAV_ROOT_FOLDER,
-                genre_label,
+                fav_playlist_name(self.genre, self.temperament),
             ]
         genre_label = normalize_fav_genre_label(self.genre)
         if self.item_type == AssignmentType.TEMPER_TRACK:

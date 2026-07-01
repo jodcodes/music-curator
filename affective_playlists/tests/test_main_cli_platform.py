@@ -219,6 +219,43 @@ def test_curate_feature_accepts_smoke_test(monkeypatch):
     assert calls == {"scope": "fav_songs", "apply": False, "smoke_test": True}
 
 
+def test_tools_feature_lists_bundled_scripts(monkeypatch, capsys):
+    import main
+
+    monkeypatch.setattr(main, "IS_MACOS", True)
+
+    assert main.run_music_tools(SimpleNamespace(list=True)) == 0
+
+    output = capsys.readouterr().out
+    assert "sort-favourites" in output
+    assert "find-duplicates" in output
+    assert "cleanup-genres" in output
+    assert "enrich-genres" in output
+
+
+def test_tools_feature_dispatches_selected_script(monkeypatch):
+    import main
+
+    calls = {}
+
+    def fake_run_music_tool(tool_name, extra_args):
+        calls["tool_name"] = tool_name
+        calls["extra_args"] = list(extra_args)
+
+        class Result:
+            stdout = "done"
+            stderr = ""
+            returncode = 0
+
+        return Result()
+
+    monkeypatch.setattr(main, "run_music_tool", fake_run_music_tool)
+    monkeypatch.setattr(main, "IS_MACOS", True)
+
+    assert main.run_music_tools(SimpleNamespace(tool="sort-favourites", tool_args=["--dry-run"])) == 0
+    assert calls == {"tool_name": "sort-favourites", "extra_args": ["--dry-run"]}
+
+
 def test_curate_feature_on_non_macos_exits_without_service(monkeypatch):
     import main
 
@@ -318,3 +355,233 @@ def test_run_curation_smoke_test_only_runs_reversible_smoke(monkeypatch, capsys)
     assert "Smoke test" in output
     assert "copied: 1" in output
     assert "leftovers: {'root': 0, 'genre': 0, 'playlist': 0}" in output
+
+
+def test_enrich_subcommand_uses_noninteractive_playlist_args(monkeypatch):
+    import main
+
+    calls = {}
+
+    class FakeCLI:
+        def run(self, args):
+            calls["playlist"] = args.playlist
+            calls["folder"] = args.folder
+            calls["force"] = args.force
+            calls["verbose"] = args.verbose
+            return 0
+
+    monkeypatch.setattr(main, "IS_MACOS", True)
+    monkeypatch.setattr("src.metadata_fill.MetadataFillCLI", FakeCLI)
+    monkeypatch.setattr(
+        main.Menu,
+        "select",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("interactive menu should not be used")
+        ),
+    )
+
+    assert main.main(["enrich", "--playlist", "gc 80s dance and synth pop", "--force"]) == 0
+    assert calls == {
+        "playlist": "gc 80s dance and synth pop",
+        "folder": None,
+        "force": True,
+        "verbose": False,
+    }
+
+
+def test_enrich_subcommand_uses_noninteractive_folder_args(monkeypatch):
+    import main
+
+    calls = {}
+
+    class FakeCLI:
+        def run(self, args):
+            calls["playlist"] = args.playlist
+            calls["folder"] = args.folder
+            calls["force"] = args.force
+            calls["verbose"] = args.verbose
+            return 0
+
+    monkeypatch.setattr("src.metadata_fill.MetadataFillCLI", FakeCLI)
+    monkeypatch.setattr(
+        main.Menu,
+        "select",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("interactive menu should not be used")
+        ),
+    )
+
+    assert main.main(["enrich", "--folder", "/Users/me/Music/Test"]) == 0
+    assert calls == {
+        "playlist": None,
+        "folder": "/Users/me/Music/Test",
+        "force": False,
+        "verbose": False,
+    }
+
+
+def test_enrich_subcommand_accepts_all_modes(monkeypatch):
+    import main
+
+    calls = []
+
+    class FakeCLI:
+        def run(self, args):
+            calls.append(
+                {
+                    "all_playlists": args.all_playlists,
+                    "all_songs": args.all_songs,
+                    "playlist": args.playlist,
+                    "folder": args.folder,
+                }
+            )
+            return 0
+
+    monkeypatch.setattr(main, "IS_MACOS", True)
+    monkeypatch.setattr("src.metadata_fill.MetadataFillCLI", FakeCLI)
+
+    assert main.main(["enrich", "--all-playlists"]) == 0
+    assert main.main(["enrich", "--all-songs"]) == 0
+    assert calls == [
+        {"all_playlists": True, "all_songs": False, "playlist": None, "folder": None},
+        {"all_playlists": False, "all_songs": True, "playlist": None, "folder": None},
+    ]
+
+
+# ============================================================================
+# New CLI command tests: scan, status, dedupe, export
+# ============================================================================
+
+class TestScanCommand:
+    def test_scan_requires_macos(self, monkeypatch):
+        import main
+        monkeypatch.setattr(main, "IS_MACOS", False)
+        assert main.run_scan() == 1
+
+    def test_scan_calls_apple_music_and_records_run(self, monkeypatch, tmp_path):
+        import main
+        import src.db as db
+        import src.library_state_store as lss
+
+        url = f"sqlite:///{tmp_path / 'scan.db'}"
+        _, SessionLocal = db.init_db(url)
+        session = SessionLocal()
+        monkeypatch.setattr(lss, "get_session", lambda: session)
+        monkeypatch.setattr(db, "get_session", lambda: session)
+        monkeypatch.setattr(main, "IS_MACOS", True)
+
+        class FakeAM:
+            def get_playlists(self):
+                return [{"id": "p1", "name": "Test"}]
+            def get_all_tracks(self):
+                return [
+                    {"artist": "A", "name": "T", "genre": "Rock", "year": 2020},
+                    {"artist": "B", "name": "T2"},  # missing genre/year
+                ]
+
+        monkeypatch.setattr(main, "AppleMusicInterface", lambda: FakeAM())
+
+        result = main.run_scan()
+        assert result == 0
+
+        store = lss.LibraryStateStore(session=session)
+        runs = store.list_runs(limit=5, run_type="scan")
+        assert len(runs) == 1
+        assert runs[0].status == "completed"
+        assert runs[0].processed_items == 2
+
+
+class TestStatusCommand:
+    def test_status_returns_0(self, monkeypatch, tmp_path):
+        import main
+        import src.db as db
+        import src.library_state_store as lss
+
+        url = f"sqlite:///{tmp_path / 'status.db'}"
+        _, SessionLocal = db.init_db(url)
+        session = SessionLocal()
+        monkeypatch.setattr(lss, "get_session", lambda: session)
+        monkeypatch.setattr(db, "get_session", lambda: session)
+
+        class FakeJobStore:
+            def list_jobs(self, limit=5, status=None):
+                return 0, []
+
+        monkeypatch.setattr(main, "get_job_store", lambda: FakeJobStore())
+
+        assert main.show_status() == 0
+
+
+class TestDedupeCommand:
+    def test_dedupe_requires_macos(self, monkeypatch):
+        import main
+        monkeypatch.setattr(main, "IS_MACOS", False)
+        assert main.run_dedupe() == 1
+
+    def test_dedupe_dry_run_records_run(self, monkeypatch, tmp_path):
+        import main
+        import src.db as db
+        import src.library_state_store as lss
+
+        url = f"sqlite:///{tmp_path / 'dedupe.db'}"
+        _, SessionLocal = db.init_db(url)
+        session = SessionLocal()
+        monkeypatch.setattr(lss, "get_session", lambda: session)
+        monkeypatch.setattr(db, "get_session", lambda: session)
+        monkeypatch.setattr(main, "IS_MACOS", True)
+
+        class FakeAM:
+            def get_playlists(self):
+                return [{"id": "p1", "name": "Mix"}]
+            def get_playlist_tracks(self, name):
+                return [
+                    {"artist": "A", "name": "Song", "album": "AL"},
+                    {"artist": "A", "name": "Song", "album": "AL"},  # dup
+                ]
+
+        monkeypatch.setattr(main, "AppleMusicInterface", lambda: FakeAM())
+
+        result = main.run_dedupe()
+        assert result == 0
+
+        store = lss.LibraryStateStore(session=session)
+        runs = store.list_runs(limit=5, run_type="dedupe")
+        assert len(runs) == 1
+        assert runs[0].details["duplicates"] == 1
+
+
+class TestExportCommand:
+    def test_export_writes_json_file(self, monkeypatch, tmp_path):
+        import json
+        import main
+        import src.db as db
+        import src.library_state_store as lss
+
+        url = f"sqlite:///{tmp_path / 'export.db'}"
+        _, SessionLocal = db.init_db(url)
+        session = SessionLocal()
+        monkeypatch.setattr(lss, "get_session", lambda: session)
+        monkeypatch.setattr(db, "get_session", lambda: session)
+
+        class FakeJobStore:
+            def list_jobs(self, limit=100):
+                return 0, []
+
+        monkeypatch.setattr(main, "get_job_store", lambda: FakeJobStore())
+
+        store = lss.LibraryStateStore(session=session)
+        store.create_run("scan", target="library", payload={})
+
+        out = str(tmp_path / "out.json")
+        from types import SimpleNamespace
+        result = main.run_export(SimpleNamespace(output=out, limit=100))
+        assert result == 0
+
+        with open(out) as f:
+            data = json.load(f)
+
+        assert "runs" in data
+        assert "dedupe_history" in data
+        assert "jobs" in data
+        assert len(data["runs"]) == 1
+        assert data["summary"]["total_runs"] == 1

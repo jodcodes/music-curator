@@ -60,6 +60,7 @@ from tqdm import tqdm
 
 from src.models import ClassificationResult, Playlist, Temperament, Track
 from src.genre_groups import canonical_genre_label
+from src.deduplication import build_track_key
 from src.playlist_utils import PlaylistSelector, PlaylistWhitelistFilter
 from src.prompts import (
     SYSTEM_PROMPT_PLAYLIST,
@@ -348,7 +349,7 @@ class MusicAppClient(MusicLibraryClient):
                         continue
 
                     # Deduplication
-                    track_key = f"{track_name}_{artist}".lower()
+                    track_key = build_track_key(artist=artist, title=track_name)
                     if track_key in seen_tracks:
                         logger.debug(f"Skipping duplicate: {track_name}")
                         continue

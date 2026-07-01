@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from src.curation_models import (
     AssignmentSource,
     AssignmentType,
@@ -238,8 +240,8 @@ def test_fav_preview_builds_assignments_and_changes():
     preview = service.preview_fav_songs()
 
     targets = [a["target_path"] for a in preview["assignments"]]
-    assert ["Fav Songs", "Hip Hop & RnB"] in targets
-    assert ["Fav Songs", "Electronic"] in targets
+    assert ["Fav Songs", "Fav Hip Hop & RnB"] in targets
+    assert ["Fav Songs", "Fav Electronic"] in targets
     assert set(preview["grouped"]["Hip Hop & RnB"]) == {
         "Woe",
         "Frolic",
@@ -282,6 +284,29 @@ def test_playlist_temper_preview_reads_configured_sources(tmp_path):
     assert preview["total_assignments"] == 2
 
 
+def test_playlist_temper_preview_uses_parallel_executor_for_multiple_playlists():
+    service = CurationService(
+        apple_music=SelectedPlaylistTracks(),
+        temper_classifier=FakeTemperClassifier(),
+    )
+
+    called_with = []
+
+    import src.worker_pool as wp
+    original = wp.map_parallel
+
+    def tracking_map(fn, items, workers=None, label="items"):
+        called_with.append(list(items))
+        return original(fn, items, workers=workers, label=label)
+
+    with patch("src.curation_service.map_parallel", tracking_map):
+        preview = service.preview_playlist_tempers(["Morning", "Night"])
+
+    assert called_with == [["Morning", "Night"]]
+    assert preview["source_playlists"] == ["Morning", "Night"]
+    assert preview["total_assignments"] == 3
+
+
 def test_fav_preview_uses_title_for_apple_music_track_names():
     service = CurationService(
         apple_music=AppleMusicLikeTracks(),
@@ -293,7 +318,7 @@ def test_fav_preview_uses_title_for_apple_music_track_names():
     assert preview["assignments"][0]["item_name"] == "Apple Title"
     assert preview["assignments"][0]["target_path"] == [
         "Fav Songs",
-        "Alternative & Indie",
+        "Fav Alternative & Indie",
     ]
 
 
@@ -321,19 +346,19 @@ def test_fav_preview_groups_requested_main_genres_once():
         "Techno",
     }
     targets = [assignment["target_path"] for assignment in preview["assignments"]]
-    assert ["Fav Songs", "Rock"] in targets
-    assert ["Fav Songs", "Alternative & Indie"] in targets
-    assert ["Fav Songs", "House"] in targets
-    assert ["Fav Songs", "Techno"] in targets
-    assert ["Fav Songs", "Breakbeat/Jungle"] in targets
-    assert ["Fav Songs", "IDM"] in targets
-    assert ["Fav Songs", "Disco"] in targets
-    assert ["Fav Songs", "Funk"] in targets
-    assert ["Fav Songs", "Soul"] in targets
-    assert ["Fav Songs", "Jazz"] in targets
-    assert ["Fav Songs", "Blues"] in targets
-    assert ["Fav Songs", "Pop"] in targets
-    assert ["Fav Songs", "Lounge"] in targets
+    assert ["Fav Songs", "Fav Rock"] in targets
+    assert ["Fav Songs", "Fav Alternative & Indie"] in targets
+    assert ["Fav Songs", "Fav House"] in targets
+    assert ["Fav Songs", "Fav Techno"] in targets
+    assert ["Fav Songs", "Fav Breakbeat/Jungle"] in targets
+    assert ["Fav Songs", "Fav IDM"] in targets
+    assert ["Fav Songs", "Fav Disco"] in targets
+    assert ["Fav Songs", "Fav Funk"] in targets
+    assert ["Fav Songs", "Fav Soul"] in targets
+    assert ["Fav Songs", "Fav Jazz"] in targets
+    assert ["Fav Songs", "Fav Blues"] in targets
+    assert ["Fav Songs", "Fav Pop"] in targets
+    assert ["Fav Songs", "Fav Lounge"] in targets
 
 
 def test_fav_preview_plans_stale_generated_track_removals():
@@ -567,6 +592,6 @@ def test_fav_preview_applies_store_overrides_over_auto_assignments(tmp_path):
     preview = service.preview_fav_songs()
 
     overridden = next(a for a in preview["assignments"] if a["item_id"] == "track-1")
-    assert overridden["target_path"] == ["Fav Songs", "Ambient"]
+    assert overridden["target_path"] == ["Fav Songs", "Fav Ambient"]
     assert overridden["source"] == "manual"
     assert overridden["manual_override"] is True

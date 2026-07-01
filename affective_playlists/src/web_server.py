@@ -26,6 +26,7 @@ from flask import Flask, jsonify, render_template_string, request
 from src.db import setup_database
 from src.job_store import get_job_store
 from src.logger import setup_logger
+from src.library_state_store import LibraryStateStore
 from src.rate_limiter import check_job_quota, rate_limit
 from src.realtime import get_realtime_manager, simulate_sse_stream
 
@@ -443,46 +444,48 @@ def classify_playlist(playlist_id: str):
 @app.route("/api/playlists/organize", methods=["POST"])
 def organize_playlists():
     """
-    Generate dry-run preview of playlist organization.
+    Generate dry-run preview of playlist organization using the real classifier.
 
     Request body:
-      {
-        "playlist_ids": ["id1", "id2"],
-        "dry_run": true
-      }
-
-    Returns:
-      {
-        "changes": [
-          {
-            "playlist_id": "id1",
-            "name": "Playlist 1",
-            "current_location": "/Music/Playlists",
-            "proposed_location": "/Music/Rock",
-            "genre": "rock"
-          },
-          ...
-        ],
-        "total_changes": 5,
-        "success": true
-      }
+      { "playlist_ids": ["id1", "id2"], "dry_run": true }
     """
     try:
         data = request.get_json() or {}
         playlist_ids = data.get("playlist_ids", [])
 
-        # Mock implementation - would use classifier to suggest organization
+        classifier = _get_playlist_classifier()
+        pm = _get_playlist_manager()
+
+        if not classifier or not pm:
+            return jsonify({"error": "Playlist classifier unavailable"}), 503
+
+        # Use cached playlists if no ids given
+        if not playlist_ids:
+            cached = _get_playlists_from_cache()
+            playlist_ids = [p["id"] for p in cached] if cached else []
+
+        if not playlist_ids:
+            return jsonify({"changes": [], "total_changes": 0, "success": True})
+
         changes = []
-        for pid in playlist_ids[:3]:  # Limit to first 3 for demo
-            changes.append(
-                {
-                    "playlist_id": pid,
-                    "name": f"Playlist {pid}",
-                    "current_location": "/Playlists",
-                    "proposed_location": "/Genre/Rock",
-                    "genre": "rock",
-                }
-            )
+        for pid in playlist_ids:
+            try:
+                detail = pm.get_playlist_details(pid) or {}
+                tracks = detail.get("tracks", [])
+                genre, info = classifier.classify_playlist(tracks, pid)
+                if genre:
+                    changes.append(
+                        {
+                            "playlist_id": pid,
+                            "name": detail.get("name", pid),
+                            "current_location": "/Playlists",
+                            "proposed_location": f"/Genre/{genre.title()}",
+                            "genre": genre,
+                            "confidence": (info or {}).get("confidence", 0.0),
+                        }
+                    )
+            except Exception as exc:
+                logger.debug(f"Could not classify playlist {pid}: {exc}")
 
         return jsonify({"changes": changes, "total_changes": len(changes), "success": True})
     except Exception as e:
@@ -495,27 +498,11 @@ def move_playlists():
     """
     Execute playlist moves (requires confirmation from frontend).
 
-    Request body:
-      {
-        "playlist_ids": ["id1", "id2"],
-        "confirmed": true
-      }
+    Expects the ``changes`` array produced by /api/playlists/organize so the
+    frontend never has to re-classify — it passes the preview straight through.
 
-    Returns:
-      {
-        "moved": 5,
-        "failed": 0,
-        "duration_seconds": 12,
-        "success": true,
-        "results": [
-          {
-            "playlist_id": "id1",
-            "success": true,
-            "message": "Moved to /Music/Rock"
-          },
-          ...
-        ]
-      }
+    Request body:
+      { "confirmed": true, "changes": [{"playlist_id": ..., "name": ..., "genre": ...}] }
     """
     try:
         data = request.get_json() or {}
@@ -524,24 +511,42 @@ def move_playlists():
         if not confirmed:
             return jsonify({"error": "Confirmation required"}), 400
 
-        playlist_ids = data.get("playlist_ids", [])
+        changes = data.get("changes", [])
+        if not changes:
+            return jsonify({"moved": 0, "failed": 0, "duration_seconds": 0, "success": True, "results": []})
 
-        # Mock results
-        results = [
-            {
-                "playlist_id": pid,
-                "success": True,
-                "message": "Moved successfully",
-            }
-            for pid in playlist_ids[:3]
-        ]
+        pm = _get_playlist_manager()
+        if not pm:
+            return jsonify({"error": "Playlist manager unavailable"}), 503
+
+        import time as _time
+        start = _time.time()
+        results = []
+        moved = 0
+        failed = 0
+        for change in changes:
+            pid = change.get("playlist_id", "")
+            name = change.get("name", pid)
+            genre = change.get("genre", "")
+            folder = f"Genre/{genre.title()}" if genre else "Unclassified"
+            try:
+                ok = pm.move_playlist_to_folder(name, folder)
+                results.append({"playlist_id": pid, "success": ok, "message": f"Moved to {folder}" if ok else "Move failed"})
+                if ok:
+                    moved += 1
+                else:
+                    failed += 1
+            except Exception as exc:
+                logger.warning(f"Move failed for {name}: {exc}")
+                results.append({"playlist_id": pid, "success": False, "message": str(exc)})
+                failed += 1
 
         return jsonify(
             {
-                "moved": len(results),
-                "failed": 0,
-                "duration_seconds": 5,
-                "success": True,
+                "moved": moved,
+                "failed": failed,
+                "duration_seconds": int(_time.time() - start),
+                "success": failed == 0,
                 "results": results,
             }
         )
@@ -906,28 +911,56 @@ def start_enrichment():
 
 @app.route("/api/enrichment/results", methods=["GET"])
 def enrichment_results():
-    """
-    Get completed enrichment results.
-
-    Returns:
-      {
-        "status": "completed",
-        "tracks_enriched": 0,
-        "fields_added": 0,
-        "duration_seconds": 0,
-        "results": [
-          {
-            "track_id": "track-1",
-            "track_name": "Song",
-            "fields": ["genre", "year"],
-            "sources": ["spotify", "genius"]
-          },
-          ...
-        ]
-      }
-    """
+    """Get completed enrichment results from the persistent state store."""
     try:
-        return jsonify(_enrichment_results)
+        job_id = request.args.get("job_id")
+        limit = request.args.get("limit", 20, type=int)
+
+        job_store = get_job_store()
+        state_store = LibraryStateStore()
+
+        if job_id:
+            job = job_store.get_job(job_id)
+            if not job:
+                return jsonify({"error": "Job not found"}), 404
+            # Pull recent enrich runs that match this job's scope
+            runs = state_store.list_runs(limit=1, run_type="enrich")
+            status = job.status
+            tracks_enriched = runs[0].processed_items if runs else job.current_track
+            duration = 0
+            if job.started_at and job.completed_at:
+                duration = int((job.completed_at - job.started_at).total_seconds())
+        else:
+            runs = state_store.list_runs(limit=1, run_type="enrich")
+            status = runs[0].status if runs else "idle"
+            tracks_enriched = runs[0].processed_items if runs else 0
+            duration = 0
+            if runs and runs[0].started_at and runs[0].completed_at:
+                duration = int((runs[0].completed_at - runs[0].started_at).total_seconds())
+
+        # Recent track history for this scope
+        recent_tracks = state_store.list_tracks(scope="metadata_fill", limit=limit)
+        results = [
+            {
+                "track_key": t.track_key,
+                "artist": t.artist,
+                "title": t.title,
+                "album": t.album,
+                "last_seen_at": t.last_seen_at.isoformat() if t.last_seen_at else None,
+                "skip_reason": t.skip_reason,
+            }
+            for t in recent_tracks
+        ]
+
+        return jsonify(
+            {
+                "status": status,
+                "tracks_enriched": tracks_enriched,
+                "fields_added": 0,  # ponytail: field-level tracking not yet wired; upgrade when needed
+                "duration_seconds": duration,
+                "results": results,
+            }
+        )
     except Exception as e:
         logger.error(f"Failed to get enrichment results: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1225,6 +1258,96 @@ def list_jobs():
         )
     except Exception as e:
         logger.error(f"Failed to list jobs: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/history", methods=["GET"])
+@rate_limit(limit=200)
+def history():
+    """Return recent library runs and jobs from the shared state stores."""
+    try:
+        limit = request.args.get("limit", 20, type=int)
+        run_type = request.args.get("type")
+        status = request.args.get("status")
+        job_type = request.args.get("job_type")
+
+        state_store = LibraryStateStore()
+        job_store = get_job_store()
+
+        runs = [run.to_dict() for run in state_store.list_runs(limit=limit, run_type=run_type)]
+        total_jobs, jobs = job_store.list_jobs(
+            page=1, limit=limit, status=status, job_type=job_type
+        )
+
+        return jsonify(
+            {
+                "runs": runs,
+                "jobs": [job.to_dict() for job in jobs],
+                "jobs_total_count": total_jobs,
+                "limit": limit,
+            }
+        )
+    except Exception as e:
+        logger.error(f"Failed to list history: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/runs", methods=["GET"])
+@rate_limit(limit=200)
+def list_runs():
+    """List library runs (enrich, dedupe, scan, organize) from the persistent state store."""
+    try:
+        limit = request.args.get("limit", 20, type=int)
+        run_type = request.args.get("type")
+
+        state_store = LibraryStateStore()
+        runs = state_store.list_runs(limit=limit, run_type=run_type)
+
+        return jsonify(
+            {
+                "runs": [r.to_dict() for r in runs],
+                "total": len(runs),
+                "limit": limit,
+            }
+        )
+    except Exception as e:
+        logger.error(f"Failed to list runs: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/dedupe", methods=["GET"])
+@rate_limit(limit=200)
+def list_dedupe():
+    """Return recent deduplication history entries."""
+    try:
+        limit = request.args.get("limit", 50, type=int)
+        scope = request.args.get("scope")
+
+        state_store = LibraryStateStore()
+        entries = state_store.list_tracks(scope=scope, limit=limit)
+
+        return jsonify(
+            {
+                "entries": [
+                    {
+                        "scope": e.scope,
+                        "track_key": e.track_key,
+                        "artist": e.artist,
+                        "title": e.title,
+                        "album": e.album,
+                        "last_seen_at": e.last_seen_at.isoformat() if e.last_seen_at else None,
+                        "skip_reason": e.skip_reason,
+                        "source": e.source,
+                    }
+                    for e in entries
+                ],
+                "total": len(entries),
+                "limit": limit,
+                "scope": scope,
+            }
+        )
+    except Exception as e:
+        logger.error(f"Failed to list dedupe entries: {e}")
         return jsonify({"error": str(e)}), 500
 
 

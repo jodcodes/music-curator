@@ -246,6 +246,30 @@ end tell
         # If both failed
         return []
 
+    def get_library_tracks(self) -> List[Dict]:
+        """Get all tracks from the main Apple Music library playlist."""
+        script = """
+tell application "Music"
+    set trackList to {}
+    try
+        set targetPlaylist to item 1 of library playlists
+        repeat with trk in tracks of targetPlaylist
+            set trackInfo to {title:name of trk, name:name of trk, persistent_id:persistent ID of trk, artist:artist of trk, album:album of trk, genre:genre of trk, bpm:bpm of trk, year:year of trk, composer:composer of trk, location:location of trk}
+            set end of trackList to trackInfo
+        end repeat
+        return trackList
+    on error
+        return {}
+    end try
+end tell
+"""
+        success, output = self._run_applescript(script)
+        if not success or not output:
+            return []
+
+        tracks = self._parse_applescript_dict_list(output)
+        return tracks if tracks else []
+
     def get_favourite_tracks(self) -> List[Dict]:
         """Return tracks from Apple Music's Favourite Songs playlist."""
         return [
@@ -439,26 +463,65 @@ end tell
         if persistent_id is not None and str(persistent_id).strip():
             normalized["persistent_id"] = str(persistent_id).strip()
 
+        location = normalized.get("location")
+        filepath = normalized.get("filepath")
+        if (filepath is None or str(filepath).strip() == "") and location is not None:
+            location_text = str(location).strip()
+            if location_text and location_text.lower() != "missing value":
+                normalized["filepath"] = location_text
+
         return normalized
 
     def _get_regular_playlist_tracks(self, playlist_name: str) -> Optional[List[Dict]]:
         """Get tracks from a regular (non-folder) playlist."""
         script = f"""
+on cleanText(rawValue)
+    try
+        set textValue to rawValue as text
+    on error
+        set textValue to ""
+    end try
+    if textValue is "missing value" then set textValue to ""
+    set textValue to my replaceText(tab, " ", textValue)
+    set textValue to my replaceText(linefeed, " ", textValue)
+    set textValue to my replaceText(return, " ", textValue)
+    return textValue
+end cleanText
+
+on replaceText(findText, replaceTextValue, sourceText)
+    set oldDelimiters to AppleScript's text item delimiters
+    set AppleScript's text item delimiters to findText
+    set textItems to text items of sourceText
+    set AppleScript's text item delimiters to replaceTextValue
+    set sourceText to textItems as text
+    set AppleScript's text item delimiters to oldDelimiters
+    return sourceText
+end replaceText
+
 tell application "Music"
-    set trackList to {{}}
+    set trackRows to {{}}
+    set oldDelimiters to AppleScript's text item delimiters
     
     try
         set targetPlaylist to playlist "{playlist_name}"
         set trackCount to count of tracks of targetPlaylist
         if trackCount > 0 then
             repeat with trk in tracks of targetPlaylist
-                set trackInfo to {{title:name of trk, name:name of trk, persistent_id:persistent ID of trk, artist:artist of trk, album:album of trk, genre:genre of trk, bpm:bpm of trk, year:year of trk, composer:composer of trk, duration:duration of trk}}
-                set end of trackList to trackInfo
+                set trackLocation to ""
+                try
+                    set trackLocation to POSIX path of (location of trk as alias)
+                end try
+                set AppleScript's text item delimiters to tab
+                set end of trackRows to {{my cleanText(name of trk), my cleanText(persistent ID of trk), my cleanText(artist of trk), my cleanText(album of trk), my cleanText(genre of trk), my cleanText(bpm of trk), my cleanText(year of trk), my cleanText(composer of trk), my cleanText(duration of trk), my cleanText(trackLocation)}} as text
             end repeat
         end if
-        return trackList
+        set AppleScript's text item delimiters to linefeed
+        set outputText to trackRows as text
+        set AppleScript's text item delimiters to oldDelimiters
+        return outputText
     on error errMsg
-        return {{}}
+        set AppleScript's text item delimiters to oldDelimiters
+        return ""
     end try
 end tell
 """
@@ -468,7 +531,33 @@ end tell
         if not output:
             return None
 
-        tracks = self._parse_applescript_dict_list(output)
+        tracks = self._parse_track_rows(output)
+        return tracks if tracks else None
+
+    def _parse_track_rows(self, output: str) -> Optional[List[Dict]]:
+        tracks: List[Dict] = []
+        for row in output.splitlines():
+            fields = row.split("\t")
+            if len(fields) < 10:
+                fields.extend([""] * (10 - len(fields)))
+            name, persistent_id, artist, album, genre, bpm, year, composer, duration, filepath = fields[:10]
+            tracks.append(
+                self._normalize_track_dict(
+                    {
+                        "title": name,
+                        "name": name,
+                        "persistent_id": persistent_id,
+                        "artist": artist,
+                        "album": album,
+                        "genre": genre,
+                        "bpm": bpm,
+                        "year": year,
+                        "composer": composer,
+                        "duration": duration,
+                        "filepath": filepath,
+                    }
+                )
+            )
         return tracks if tracks else None
 
     def _get_folder_all_tracks(self, folder_name: str) -> Optional[List[Dict]]:

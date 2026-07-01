@@ -88,6 +88,11 @@ const DOM = {
     statPlatform: () => document.getElementById('statPlatform'),
     recentActivity: () => document.getElementById('recentActivity'),
 
+    // History
+    historyRunsBody: () => document.getElementById('historyRunsBody'),
+    historyJobsBody: () => document.getElementById('historyJobsBody'),
+    historyDedupBody: () => document.getElementById('historyDedupBody'),
+
     // Playlists
     playlistsBody: () => document.getElementById('playlistsBody'),
     playlistsTable: () => document.getElementById('playlistsTable'),
@@ -183,6 +188,7 @@ function showView(viewName) {
             analyze: 'Analyze Mood',
             organize: 'Organize Playlists',
             curation: 'Curation Review',
+            history: 'Library History',
         };
         DOM.pageTitle().textContent = titles[viewName] || viewName;
     }
@@ -294,10 +300,61 @@ async function loadDashboard() {
 
         app.state.isOnline = true;
         updateStatus();
+
+        // Load recent activity from history
+        loadRecentActivity();
     } catch (error) {
         showAlert('Failed to load dashboard: ' + error.message, 'danger');
     } finally {
         showSpinner(false);
+    }
+}
+
+async function loadRecentActivity() {
+    try {
+        const data = await app.api('/history?limit=5');
+        const el = DOM.recentActivity();
+        if (!el) return;
+
+        const runs = asArray(data.runs);
+        const jobs = asArray(data.jobs);
+
+        if (!runs.length && !jobs.length) {
+            el.innerHTML = '<p class="text-muted">No recent activity</p>';
+            return;
+        }
+
+        const items = [
+            ...runs.map(r => ({
+                ts: r.created_at || '',
+                label: `${r.run_type} — ${r.status}`,
+                sub: r.target ? `Target: ${r.target}` : '',
+                icon: r.status === 'completed' ? '✓' : r.status === 'running' ? '⟳' : '✗',
+                cls: r.status === 'completed' ? 'success' : r.status === 'running' ? 'info' : 'warning',
+            })),
+            ...jobs.map(j => ({
+                ts: j.created_at || '',
+                label: `${j.type} job — ${j.status}`,
+                sub: j.progress != null ? `${j.progress}%` : '',
+                icon: j.status === 'completed' ? '✓' : j.status === 'running' ? '⟳' : '✗',
+                cls: j.status === 'completed' ? 'success' : 'info',
+            })),
+        ]
+        .sort((a, b) => b.ts.localeCompare(a.ts))
+        .slice(0, 5);
+
+        el.innerHTML = items.map(item => `
+            <div class="activity-item activity-${item.cls}">
+                <span class="activity-icon">${item.icon}</span>
+                <div>
+                    <strong>${item.label}</strong>
+                    ${item.sub ? `<small class="text-muted"> — ${item.sub}</small>` : ''}
+                    <div class="text-muted" style="font-size:0.75em">${item.ts}</div>
+                </div>
+            </div>
+        `).join('');
+    } catch (_) {
+        // non-fatal; dashboard still works without history
     }
 }
 
@@ -499,6 +556,9 @@ function renderTemperamentChart(results) {
 // Organization
 // ============================================================================
 
+// Keep last organize result so confirmMove can pass real changes to /move
+let _lastOrganizeChanges = [];
+
 async function reviewChanges() {
     try {
         showSpinner(true);
@@ -508,9 +568,11 @@ async function reviewChanges() {
         });
 
         if (result.changes && result.changes.length > 0) {
+            _lastOrganizeChanges = result.changes;
             renderOrganizationPreview(result.changes, result.total_changes);
             DOM.organizationPreview().style.display = 'block';
         } else {
+            _lastOrganizeChanges = [];
             showAlert('No playlists to organize', 'info');
         }
     } catch (error) {
@@ -524,10 +586,10 @@ function renderOrganizationPreview(changes, total) {
     const body = DOM.previewBody();
     body.innerHTML = changes.map(change => `
         <tr>
-            <td>${change.playlist_id}</td>
-            <td>${change.current_location}</td>
+            <td>${change.name || change.playlist_id}</td>
+            <td>${change.current_location || '/Playlists'}</td>
             <td><strong>${change.proposed_location}</strong></td>
-            <td>${change.genre}</td>
+            <td>${change.genre}${change.confidence != null ? ` <small>(${(change.confidence * 100).toFixed(0)}%)</small>` : ''}</td>
         </tr>
     `).join('');
 
@@ -547,11 +609,16 @@ async function confirmMove() {
         showSpinner(true);
         const result = await app.api('/playlists/move', {
             method: 'POST',
-            body: { confirmed: true },
+            body: { confirmed: true, changes: _lastOrganizeChanges },
         });
 
-        showAlert(`✓ Moved ${result.moved} playlists successfully!`, 'success');
+        if (result.failed > 0) {
+            showAlert(`Moved ${result.moved}, ${result.failed} failed (${result.duration_seconds}s)`, 'warning');
+        } else {
+            showAlert(`✓ Moved ${result.moved} playlists in ${result.duration_seconds}s`, 'success');
+        }
         DOM.organizationPreview().style.display = 'none';
+        _lastOrganizeChanges = [];
         loadPlaylists();
     } catch (error) {
         showAlert('Failed to move playlists: ' + error.message, 'danger');
@@ -1257,6 +1324,87 @@ async function applyFavSongsCuration() {
 }
 
 // ============================================================================
+// History
+// ============================================================================
+
+async function loadHistory() {
+    try {
+        showSpinner(true);
+        const [histData, dedupData] = await Promise.all([
+            app.api('/history?limit=50'),
+            app.api('/dedupe?limit=50'),
+        ]);
+
+        // Runs table
+        const runsBody = DOM.historyRunsBody();
+        if (runsBody) {
+            const runs = asArray(histData.runs);
+            if (runs.length) {
+                runsBody.innerHTML = runs.map(r => `
+                    <tr>
+                        <td><code>${r.id}</code></td>
+                        <td>${r.run_type}</td>
+                        <td>${r.target || '—'}</td>
+                        <td><span class="badge badge-${r.status === 'completed' ? 'success' : r.status === 'running' ? 'info' : 'warning'}">${r.status}</span></td>
+                        <td>${r.processed_items || 0}</td>
+                        <td>${r.skipped_items || 0}</td>
+                        <td>${r.started_at ? r.started_at.replace('T', ' ').slice(0, 19) : '—'}</td>
+                    </tr>
+                `).join('');
+            } else {
+                runsBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No runs yet</td></tr>';
+            }
+        }
+
+        // Jobs table
+        const jobsBody = DOM.historyJobsBody();
+        if (jobsBody) {
+            const jobs = asArray(histData.jobs);
+            if (jobs.length) {
+                jobsBody.innerHTML = jobs.map(j => `
+                    <tr>
+                        <td><code>${j.id}</code></td>
+                        <td>${j.type}</td>
+                        <td>${j.status}</td>
+                        <td>${j.progress != null ? j.progress + '%' : '—'}</td>
+                        <td>${j.created_at ? j.created_at.replace('T', ' ').slice(0, 19) : '—'}</td>
+                    </tr>
+                `).join('');
+            } else {
+                jobsBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No jobs yet</td></tr>';
+            }
+        }
+
+        // Dedup table
+        const dedupBody = DOM.historyDedupBody();
+        if (dedupBody) {
+            const entries = asArray(dedupData.entries);
+            if (entries.length) {
+                dedupBody.innerHTML = entries.map(e => `
+                    <tr>
+                        <td>${e.artist || '—'}</td>
+                        <td>${e.title || '—'}</td>
+                        <td>${e.album || '—'}</td>
+                        <td><code>${e.scope || '—'}</code></td>
+                        <td>${e.skip_reason || '—'}</td>
+                        <td>${e.last_seen_at ? e.last_seen_at.replace('T', ' ').slice(0, 19) : '—'}</td>
+                    </tr>
+                `).join('');
+            } else {
+                dedupBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No dedup entries yet</td></tr>';
+            }
+        }
+
+        app.state.isOnline = true;
+        updateStatus();
+    } catch (error) {
+        showAlert('Failed to load history: ' + error.message, 'danger');
+    } finally {
+        showSpinner(false);
+    }
+}
+
+// ============================================================================
 // Event Listeners
 // ============================================================================
 
@@ -1272,6 +1420,7 @@ function setupEventListeners() {
             if (view === 'playlists') loadPlaylists();
             if (view === 'dashboard') loadDashboard();
             if (view === 'curation') loadCurationSnapshot();
+            if (view === 'history') loadHistory();
         });
     });
 
@@ -1355,6 +1504,9 @@ async function init() {
         showView(lastView);
         if (lastView === 'curation') {
             loadCurationSnapshot();
+        }
+        if (lastView === 'history') {
+            loadHistory();
         }
     } catch (error) {
         showAlert('Failed to initialize application: ' + error.message, 'danger');

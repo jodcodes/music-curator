@@ -18,6 +18,7 @@ Test coverage:
 - POST /api/enrichment/cancel - Cancel enrichment
 - POST /api/temperament/classify - Classify tracks by mood
 - GET /api/temperament/results - Get mood classification results
+- GET /api/history - Show recent runs and jobs
 - POST /api/settings - Save user preferences
 """
 
@@ -471,6 +472,51 @@ class TestSettingsEndpoint:
         assert response.status_code == 200
 
 
+class TestHistoryEndpoint:
+    """Tests for GET /api/history endpoint."""
+
+    def test_history_returns_recent_runs_and_jobs(self, tmp_path, monkeypatch, client):
+        import src.db as db
+        import src.library_state_store as state_store
+        import src.web_server as ws
+
+        database_url = f"sqlite:///{tmp_path / 'history.db'}"
+        original_init_db = db.init_db
+
+        def init_temp_db():
+            return original_init_db(database_url)
+
+        class FakeJob:
+            def to_dict(self):
+                return {"id": "job-1", "type": "enrichment", "status": "completed"}
+
+        class FakeJobStore:
+            def list_jobs(self, page=1, limit=20, status=None, job_type=None):
+                return 1, [FakeJob()]
+
+        monkeypatch.setattr(db, "init_db", init_temp_db)
+        _, SessionLocal = init_temp_db()
+        session = SessionLocal()
+        monkeypatch.setattr(state_store, "get_session", lambda: session)
+        monkeypatch.setattr(ws, "get_job_store", lambda: FakeJobStore())
+
+        store = state_store.LibraryStateStore(session=session)
+        store.create_run(
+            run_type="enrich",
+            target="fav_songs",
+            payload={"playlist_ids": ["pl-1"]},
+        )
+
+        response = client.get("/api/history")
+        data = json.loads(response.data)
+
+        assert response.status_code == 200
+        assert len(data["runs"]) == 1
+        assert data["runs"][0]["run_type"] == "enrich"
+        assert len(data["jobs"]) == 1
+        assert data["jobs"][0]["id"] == "job-1"
+
+
 class TestErrorHandling:
     """Tests for error handling."""
 
@@ -513,26 +559,218 @@ class TestOrganizeEndpoint:
         data = json.loads(response.data)
         assert isinstance(data["changes"], list)
 
+    def test_organize_uses_real_classifier_when_available(self, client, monkeypatch):
+        """When classifier and playlist manager are available, classify real playlists."""
+        import src.web_server as ws
+
+        class FakeClassifier:
+            def classify_playlist(self, tracks, playlist_id):
+                return "rock", {"confidence": 0.9}
+
+        class FakePM:
+            def get_playlist_details(self, pid):
+                return {"name": f"Playlist {pid}", "tracks": []}
+
+        monkeypatch.setattr(ws, "_get_playlist_classifier", lambda: FakeClassifier())
+        monkeypatch.setattr(ws, "_get_playlist_manager", lambda: FakePM())
+
+        response = client.post("/api/playlists/organize", json={"playlist_ids": ["pl-1", "pl-2"]})
+        data = json.loads(response.data)
+
+        assert response.status_code == 200
+        assert data["total_changes"] == 2
+        assert data["changes"][0]["genre"] == "rock"
+        assert data["changes"][0]["proposed_location"] == "/Genre/Rock"
+        assert "confidence" in data["changes"][0]
+
+    def test_organize_returns_503_when_classifier_unavailable(self, client, monkeypatch):
+        """Returns 503 if no classifier can be constructed."""
+        import src.web_server as ws
+        monkeypatch.setattr(ws, "_get_playlist_classifier", lambda: None)
+
+        response = client.post("/api/playlists/organize", json={"playlist_ids": ["pl-1"]})
+        assert response.status_code == 503
+
 
 class TestMoveEndpoint:
     """Tests for POST /api/playlists/move endpoint."""
 
     def test_move_requires_confirmation(self, client):
         """Move should require confirmation flag."""
-        # Without confirmation, should fail
         response = client.post("/api/playlists/move", json={})
         assert response.status_code == 400
 
-    def test_move_with_confirmation_returns_200(self, client):
-        """Move with confirmed=true should return 200."""
+    def test_move_with_no_changes_returns_200(self, client):
+        """Move with confirmed=true and no changes should return 200 with zero moved."""
         response = client.post("/api/playlists/move", json={"confirmed": True})
         assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["moved"] == 0
 
     def test_move_response_has_results(self, client):
         """Move response should have results field."""
         response = client.post("/api/playlists/move", json={"confirmed": True})
         data = json.loads(response.data)
         assert "results" in data
+
+    def test_move_calls_playlist_manager(self, client, monkeypatch):
+        """Move with real changes calls the playlist manager."""
+        import src.web_server as ws
+
+        moved = []
+
+        class FakePM:
+            def move_playlist_to_folder(self, name, folder):
+                moved.append((name, folder))
+                return True
+
+        monkeypatch.setattr(ws, "_get_playlist_manager", lambda: FakePM())
+
+        changes = [
+            {"playlist_id": "pl-1", "name": "My Mix", "genre": "jazz"},
+            {"playlist_id": "pl-2", "name": "Chill", "genre": "pop"},
+        ]
+        response = client.post("/api/playlists/move", json={"confirmed": True, "changes": changes})
+        data = json.loads(response.data)
+
+        assert response.status_code == 200
+        assert data["moved"] == 2
+        assert data["failed"] == 0
+        assert data["success"] is True
+        assert len(moved) == 2
+        assert moved[0] == ("My Mix", "Genre/Jazz")
+        assert moved[1] == ("Chill", "Genre/Pop")
+
+    def test_move_handles_partial_failure(self, client, monkeypatch):
+        """Move records per-playlist failures without crashing."""
+        import src.web_server as ws
+
+        class FlakyPM:
+            def move_playlist_to_folder(self, name, folder):
+                if name == "Bad":
+                    raise RuntimeError("AppleScript failed")
+                return True
+
+        monkeypatch.setattr(ws, "_get_playlist_manager", lambda: FlakyPM())
+
+        changes = [
+            {"playlist_id": "pl-1", "name": "Good", "genre": "rock"},
+            {"playlist_id": "pl-2", "name": "Bad", "genre": "rock"},
+        ]
+        response = client.post("/api/playlists/move", json={"confirmed": True, "changes": changes})
+        data = json.loads(response.data)
+
+        assert response.status_code == 200
+        assert data["moved"] == 1
+        assert data["failed"] == 1
+        assert data["success"] is False
+
+    def test_move_returns_503_when_manager_unavailable(self, client, monkeypatch):
+        """Returns 503 if no playlist manager can be constructed."""
+        import src.web_server as ws
+        monkeypatch.setattr(ws, "_get_playlist_manager", lambda: None)
+
+        changes = [{"playlist_id": "pl-1", "name": "X", "genre": "rock"}]
+        response = client.post("/api/playlists/move", json={"confirmed": True, "changes": changes})
+        assert response.status_code == 503
+
+
+class TestRunsEndpoint:
+    """Tests for GET /api/runs endpoint."""
+
+    def test_runs_returns_200(self, client, tmp_path, monkeypatch):
+        import src.db as db
+        import src.library_state_store as lss
+
+        url = f"sqlite:///{tmp_path / 'runs.db'}"
+        _, SessionLocal = db.init_db(url)
+        session = SessionLocal()
+        monkeypatch.setattr(lss, "get_session", lambda: session)
+
+        store = lss.LibraryStateStore(session=session)
+        store.create_run("scan", target="library", payload={})
+
+        response = client.get("/api/runs")
+        data = json.loads(response.data)
+
+        assert response.status_code == 200
+        assert "runs" in data
+        assert "total" in data
+        assert len(data["runs"]) == 1
+        assert data["runs"][0]["run_type"] == "scan"
+
+    def test_runs_supports_type_filter(self, client, tmp_path, monkeypatch):
+        import src.db as db
+        import src.library_state_store as lss
+
+        url = f"sqlite:///{tmp_path / 'runs2.db'}"
+        _, SessionLocal = db.init_db(url)
+        session = SessionLocal()
+        monkeypatch.setattr(lss, "get_session", lambda: session)
+
+        store = lss.LibraryStateStore(session=session)
+        store.create_run("scan", target="library", payload={})
+        store.create_run("enrich", target="playlist:X", payload={})
+
+        response = client.get("/api/runs?type=enrich")
+        data = json.loads(response.data)
+
+        assert response.status_code == 200
+        assert all(r["run_type"] == "enrich" for r in data["runs"])
+
+
+class TestDedupeEndpoint:
+    """Tests for GET /api/dedupe endpoint."""
+
+    def test_dedupe_returns_200(self, client, tmp_path, monkeypatch):
+        import src.db as db
+        import src.library_state_store as lss
+        from src.deduplication import build_track_key
+
+        url = f"sqlite:///{tmp_path / 'dedup.db'}"
+        _, SessionLocal = db.init_db(url)
+        session = SessionLocal()
+        monkeypatch.setattr(lss, "get_session", lambda: session)
+
+        store = lss.LibraryStateStore(session=session)
+        key = build_track_key(artist="Radiohead", title="Karma Police")
+        store.record_track(
+            scope="metadata_fill",
+            track_key=key,
+            artist="Radiohead",
+            title="Karma Police",
+            album="OK Computer",
+        )
+
+        response = client.get("/api/dedupe")
+        data = json.loads(response.data)
+
+        assert response.status_code == 200
+        assert "entries" in data
+        assert len(data["entries"]) == 1
+        assert data["entries"][0]["artist"] == "Radiohead"
+        assert data["entries"][0]["title"] == "Karma Police"
+
+    def test_dedupe_scope_filter(self, client, tmp_path, monkeypatch):
+        import src.db as db
+        import src.library_state_store as lss
+        from src.deduplication import build_track_key
+
+        url = f"sqlite:///{tmp_path / 'dedup2.db'}"
+        _, SessionLocal = db.init_db(url)
+        session = SessionLocal()
+        monkeypatch.setattr(lss, "get_session", lambda: session)
+
+        store = lss.LibraryStateStore(session=session)
+        store.record_track(scope="scope_a", track_key="k1", artist="A", title="T1")
+        store.record_track(scope="scope_b", track_key="k2", artist="B", title="T2")
+
+        response = client.get("/api/dedupe?scope=scope_a")
+        data = json.loads(response.data)
+
+        assert response.status_code == 200
+        assert all(e["scope"] == "scope_a" for e in data["entries"])
+        assert len(data["entries"]) == 1
 
 
 class TestCurationEndpoints:

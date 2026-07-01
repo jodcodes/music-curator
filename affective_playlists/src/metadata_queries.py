@@ -29,12 +29,15 @@ Example (Track missing: BPM, Year. Already has: Genre):
 
 import json
 import urllib.parse
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 import logging
 import time
 from abc import ABC, abstractmethod
+from threading import Lock
 from src.metadata_enrichment import MetadataField, DatabaseSource, MetadataEntry
 from src.http_utils import HttpClient
+from src.library_state_store import LibraryStateStore
 
 
 class DatabaseQuery(ABC):
@@ -508,12 +511,15 @@ class MetadataQueryOrchestrator:
         lastfm_api_key: Optional[str] = None,
         discogs_token: Optional[str] = None,
         logger: Optional[logging.Logger] = None,
+        state_store: Optional[LibraryStateStore] = None,
     ):
         self.logger = logger or logging.getLogger(__name__)
         self.lastfm_api_key = lastfm_api_key
         self.discogs_token = discogs_token
         self.query_cache: Dict[Tuple, List[MetadataEntry]] = {}
         self.max_cache_entries = 1000
+        self._cache_lock = Lock()
+        self.state_store = state_store
 
     def _build_cache_key(
         self,
@@ -539,6 +545,23 @@ class MetadataQueryOrchestrator:
             oldest_key = next(iter(self.query_cache))
             self.query_cache.pop(oldest_key)
         self.query_cache[key] = value
+
+    def _hydrate_cache_entries(self, payload: List[Dict]) -> List[MetadataEntry]:
+        entries: List[MetadataEntry] = []
+        for item in payload:
+            try:
+                entries.append(
+                    MetadataEntry(
+                        field=MetadataField(item["field"]),
+                        value=item["value"],
+                        source=DatabaseSource[item["source"]],
+                        confidence=float(item.get("confidence", 1.0)),
+                        timestamp=item.get("timestamp") or datetime.now().isoformat(),
+                    )
+                )
+            except Exception:
+                continue
+        return entries
 
     def query_all_sources(
         self,
@@ -586,8 +609,20 @@ class MetadataQueryOrchestrator:
 
         # Check cache with full query semantics.
         cache_key = self._build_cache_key(artist, title, duration, enrich_once, missing_fields)
-        if cache_key in self.query_cache:
-            return self.query_cache[cache_key]
+        with self._cache_lock:
+            cached = self.query_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        if self.state_store is not None:
+            persistent = self.state_store.get_cache(str(cache_key))
+            if persistent is not None:
+                payload = persistent.cache_value.get("entries", [])
+                if isinstance(payload, list):
+                    entries = self._hydrate_cache_entries(payload)
+                    if entries:
+                        with self._cache_lock:
+                            self._set_cache(cache_key, entries)
+                        return entries
 
         for source, query_class in self.QUERY_ORDER:
             # With enrich_once: check if all missing fields have been found
@@ -642,7 +677,14 @@ class MetadataQueryOrchestrator:
             time.sleep(0.5)
 
         # Cache results
-        self._set_cache(cache_key, entries)
+        with self._cache_lock:
+            self._set_cache(cache_key, entries)
+        if self.state_store is not None:
+            self.state_store.put_cache(
+                str(cache_key),
+                "metadata_query",
+                {"entries": [entry.to_dict() for entry in entries]},
+            )
 
         return entries
 

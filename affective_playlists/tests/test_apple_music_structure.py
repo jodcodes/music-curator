@@ -63,13 +63,13 @@ def test_plan_creates_fav_folder_genre_folder_playlist_and_copy():
     assert AppleMusicChange("ensure_folder", ["Fav Songs"], "Ensure folder Fav Songs") in changes
     assert AppleMusicChange(
         "ensure_playlist",
-        ["Fav Songs", "Hip Hop & RnB"],
-        "Ensure playlist Hip Hop & RnB",
+        ["Fav Songs", "Fav Hip Hop & RnB"],
+        "Ensure playlist Fav Hip Hop & RnB",
     ) in changes
     assert AppleMusicChange(
         "copy_track",
-        ["1", "Fav Songs", "Hip Hop & RnB"],
-        "Copy Track 1 to Hip Hop & RnB",
+        ["1", "Fav Songs", "Fav Hip Hop & RnB"],
+        "Copy Track 1 to Fav Hip Hop & RnB",
     ) in changes
 
 

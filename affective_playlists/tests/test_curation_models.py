@@ -48,9 +48,9 @@ def test_normalize_fav_genre_label_collapses_requested_main_genres():
 
 
 def test_fav_playlist_name_uses_requested_format():
-    assert fav_playlist_name("hiphop", TemperBucket.FROLIC) == "Fav Hip Hop & RnB Frolic"
-    assert fav_playlist_name("electronic", TemperBucket.DREAD) == "Fav Electronic Dread"
-    assert fav_playlist_name("house", TemperBucket.DREAD) == "Fav House Dread"
+    assert fav_playlist_name("hiphop", TemperBucket.FROLIC) == "Fav Hip Hop & RnB"
+    assert fav_playlist_name("electronic", TemperBucket.DREAD) == "Fav Electronic"
+    assert fav_playlist_name("house", TemperBucket.DREAD) == "Fav House"
 
 
 def test_assignment_serializes_for_api():
@@ -76,7 +76,7 @@ def test_assignment_serializes_for_api():
         "manual_override": False,
         "target_path": [
             "Fav Songs",
-            "Hip Hop & RnB",
+            "Fav Hip Hop & RnB",
         ],
     }
 

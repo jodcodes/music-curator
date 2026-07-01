@@ -370,13 +370,42 @@ class M4ATagHandler(AudioTagHandler):
 
     def write_tags(self, tags: Dict[str, str], overwrite: bool = False) -> bool:
         """Write iTunes atoms to M4A file."""
-        self.logger.info(f"Would write iTunes atoms to {self.filepath}:")
-        for field, value in tags.items():
-            atom = self.ATOM_MAPPING.get(field, f"©{field}".encode())
-            atom_str = atom.decode() if isinstance(atom, bytes) else atom
-            self.logger.debug(f"  {atom_str}: {value}")
+        if not os.path.exists(self.filepath):
+            self.logger.warning(f"File not found: {self.filepath}")
+            return False
 
-        return True
+        try:
+            from mutagen.mp4 import MP4
+
+            audio = MP4(self.filepath)
+            for field, value in tags.items():
+                clean_value = str(value).strip()
+                if not clean_value:
+                    continue
+
+                atom = self.ATOM_MAPPING.get(field)
+                if atom is None:
+                    self.logger.debug(f"Unsupported M4A tag field: {field}")
+                    continue
+                if atom in audio and not overwrite:
+                    continue
+
+                if atom == "tmpo":
+                    try:
+                        audio[atom] = [int(float(clean_value))]
+                    except ValueError:
+                        self.logger.debug(f"Invalid M4A BPM value: {clean_value}")
+                else:
+                    audio[atom] = [clean_value]
+
+            audio.save()
+            return True
+        except ImportError:
+            self.logger.warning("mutagen not installed - cannot write M4A tags")
+            return False
+        except Exception as e:
+            self.logger.error(f"Failed to write M4A tags to {self.filepath}: {e}")
+            return False
 
 
 class AudioTagFactory:

@@ -1,6 +1,6 @@
 # affective_playlists
 
-Part of the top-level `music-curator` repo. Keep this tool focused on Apple Music affective curation: 4tempers, Fav Songs genre/temper folders, metadata enrichment, and playlist organization. Shared code should stay local unless another top-level tool actively needs it.
+Core Apple Music curation app for the `music-curator` workspace. It now also owns the bundled maintenance scripts that used to live in `music_tools`.
 
 **Unified suite for music analysis and organization**
 
@@ -11,6 +11,7 @@ A powerful, single-command music tool that combines three complementary features
 - **Temperament Analysis** - AI-powered playlist emotion classification (Woe, Frolic, Dread, Malice)
 - **Metadata Enrichment** - Automatic metadata filling (BPM, Genre, Year, Cover Art) from multiple sources
 - **Playlist Organization** - Intelligent genre-based playlist classification and organization
+- **Music Tools** - Duplicate cleanup, genre cleanup, and favorite-song sorting helpers
 
 ## Quick Start (One Command)
 
@@ -77,6 +78,7 @@ Choose from:
 1. **Temperament Analysis** - AI-based emotion classification
 2. **Metadata Enrichment** - Fill missing audio metadata
 3. **Playlist Organization** - Genre-based sorting
+4. **Music Tools** - Playlist cleanup and genre maintenance
 
 ### Command Line
 
@@ -92,6 +94,10 @@ affective-playlists enrich --playlist "My Playlist"
 
 # Organize playlists by genre
 affective-playlists organize
+
+# Run bundled music tools
+affective-playlists tools --list
+affective-playlists tools sort-favourites
 
 # Show help
 affective-playlists --help

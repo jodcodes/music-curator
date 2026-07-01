@@ -29,6 +29,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass
+from threading import Lock
 from typing import Any, Dict, List, Optional, cast
 
 from tqdm import tqdm
@@ -49,16 +50,20 @@ from src.cli_ui import (
     warning,
 )
 from src.cover_art import CoverArtManager
+from src.deduplication import build_track_key
 from src.logger import setup_logger
+from src.library_state_store import LibraryStateStore
 from src.metadata_enrichment import (
     DownloadedTrackDetector,
     MetadataEnricher,
     MetadataField,
+    MetadataRequirements,
     TrackIdentifier,
 )
 from src.metadata_queries import MetadataQueryOrchestrator
 from src.models import Playlist, Track
 from src.playlist_utils import PlaylistFuzzyMatcher
+from src.worker_pool import map_parallel, resolve_workers
 
 
 @dataclass
@@ -86,8 +91,13 @@ class MetadataFiller:
         self.apple_music = AppleMusicInterface(scripts_dir)
         self.tag_manager = TagManager()
         self.enricher = MetadataEnricher(logger)
+        self.requirements = MetadataRequirements()
         self.detector = DownloadedTrackDetector()
         self.cover_art_manager = CoverArtManager(logger=logger)
+        self.state_store = LibraryStateStore()
+        self._processed_track_cache: Dict[str, bool] = {}
+        self._processed_track_cache_lock = Lock()
+        self._playlist_batch_parallel = False
 
         # Load API credentials from environment
         lastfm_key = os.getenv("LASTFM_API_KEY")
@@ -95,7 +105,10 @@ class MetadataFiller:
 
         # Initialize query orchestrator with credentials
         self.query_orchestrator = MetadataQueryOrchestrator(
-            lastfm_api_key=lastfm_key, discogs_token=discogs_token, logger=logger
+            lastfm_api_key=lastfm_key,
+            discogs_token=discogs_token,
+            logger=logger,
+            state_store=self.state_store,
         )
 
         self.stats = {"processed": 0, "enriched": 0, "skipped": 0, "errors": 0}
@@ -127,7 +140,9 @@ class MetadataFiller:
             self.logger.warning(f"Could not load playlist folders config: {e}")
             return {}
 
-    def fill_playlist(self, playlist_name: str, force: bool = False) -> Dict:
+    def fill_playlist(
+        self, playlist_name: str, force: bool = False, workers: Optional[int] = None
+    ) -> Dict:
         """
         Fill metadata for all tracks in a playlist using persistent ID.
 
@@ -163,7 +178,13 @@ class MetadataFiller:
             self.logger.error(f"Failed to get playlist tracks: {e}")
             return {"success": False, "error": str(e)}
 
-        return self._process_tracks(tracks, force)
+        effective_workers = 1 if getattr(self, "_playlist_batch_parallel", False) else workers
+        return self._process_tracks(
+            tracks,
+            force,
+            workers=effective_workers,
+            scope=f"playlist:{playlist_name}",
+        )
 
     def _get_playlist_tracks_by_id(self, playlist_id: str) -> Optional[List[Dict]]:
         """Get tracks from a playlist using persistent ID"""
@@ -237,7 +258,9 @@ class MetadataFiller:
             traceback.print_exc()
             return None
 
-    def fill_folder(self, folder_name: str, force: bool = False) -> Dict:
+    def fill_folder(
+        self, folder_name: str, force: bool = False, workers: Optional[int] = None
+    ) -> Dict:
         """
         Fill metadata for all tracks in a folder.
 
@@ -264,9 +287,120 @@ class MetadataFiller:
 
         self.logger.info(f"Found {len(audio_files)} audio files")
 
-        return self._process_files(audio_files, force)
+        if workers is None:
+            return self._process_files(audio_files, force, scope=f"folder:{folder_name}")
+        return self._process_files(
+            audio_files, force, workers=workers, scope=f"folder:{folder_name}"
+        )
 
-    def _process_tracks(self, tracks: List[Dict], force: bool = False) -> Dict:
+    def fill_all_playlists(
+        self, force: bool = False, workers: Optional[int] = None
+    ) -> Dict:
+        """Fill metadata for every user playlist in Apple Music."""
+        playlist_names = list(self.apple_music.get_playlist_ids().keys())
+        if not playlist_names:
+            return {"success": False, "error": "No playlists found"}
+
+        totals = {
+            "success": True,
+            "playlists_processed": 0,
+            "processed": 0,
+            "enriched": 0,
+            "skipped": 0,
+            "cover_art_embedded": 0,
+            "errors": 0,
+        }
+
+        self._playlist_batch_parallel = True
+        try:
+            pairs = map_parallel(
+                lambda name: self.fill_playlist(name, force=force),
+                playlist_names,
+                workers=workers,
+                label="playlists",
+            )
+        finally:
+            self._playlist_batch_parallel = False
+
+        for _name, result in pairs:
+            totals["playlists_processed"] += 1
+            if isinstance(result, Exception) or not result.get("success"):
+                totals["errors"] += 1
+                continue
+            for key in ("processed", "enriched", "skipped", "cover_art_embedded"):
+                totals[key] += result.get(key, 0)
+
+        return totals
+
+    def fill_all_songs(self, force: bool = False, workers: Optional[int] = None) -> Dict:
+        """Fill metadata for all tracks in the main Apple Music library."""
+        tracks = self.apple_music.get_library_tracks()
+        if not tracks:
+            return {"success": False, "error": "No library tracks found"}
+
+        if workers is None:
+            return self._process_tracks(tracks, force, scope="library")
+        return self._process_tracks(tracks, force, workers=workers, scope="library")
+
+    def _resolve_worker_count(self, workers: Optional[int], item_count: int) -> int:
+        return resolve_workers(workers, item_count)
+
+    def _build_track_cache_key(self, filepath: str, track_id: TrackIdentifier) -> str:
+        return build_track_key(
+            artist=track_id.artist,
+            title=track_id.title,
+            album=track_id.album,
+            duration_seconds=track_id.duration_seconds,
+            filepath=filepath,
+        )
+
+    def _track_was_processed(self, cache_key: str, scope: str = "metadata_fill") -> bool:
+        if not hasattr(self, "_processed_track_cache_lock"):
+            self._processed_track_cache_lock = Lock()
+        if not hasattr(self, "_processed_track_cache"):
+            self._processed_track_cache = {}
+        with self._processed_track_cache_lock:
+            if cache_key in self._processed_track_cache:
+                return True
+        if hasattr(self, "state_store") and self.state_store.has_track(scope, cache_key):
+            return True
+        return False
+
+    def _mark_track_processed(
+        self,
+        cache_key: str,
+        scope: str = "metadata_fill",
+        track_id: Optional[TrackIdentifier] = None,
+        filepath: Optional[str] = None,
+        run_id: Optional[str] = None,
+        skip_reason: Optional[str] = None,
+    ) -> None:
+        if not hasattr(self, "_processed_track_cache_lock"):
+            self._processed_track_cache_lock = Lock()
+        if not hasattr(self, "_processed_track_cache"):
+            self._processed_track_cache = {}
+        with self._processed_track_cache_lock:
+            self._processed_track_cache[cache_key] = True
+        if hasattr(self, "state_store"):
+            self.state_store.record_track(
+                scope=scope,
+                track_key=cache_key,
+                artist=track_id.artist if track_id else None,
+                title=track_id.title if track_id else None,
+                album=track_id.album if track_id else None,
+                filepath=filepath,
+                run_id=run_id,
+                skip_reason=skip_reason,
+                source="metadata_fill",
+            )
+
+    def _process_tracks(
+        self,
+        tracks: List[Dict],
+        force: bool = False,
+        workers: Optional[int] = None,
+        scope: str = "metadata_fill",
+    ) -> Dict:
         """
         Process playlist tracks and fill metadata.
 
@@ -284,100 +418,83 @@ class MetadataFiller:
             "skipped": 0,
             "cover_art_embedded": 0,
         }
+        run = None
+        if hasattr(self, "state_store"):
+            run_kind = scope.split(":", 1)[0]
+            run = self.state_store.create_run(
+                "enrich",
+                target=scope,
+                payload={"force": force, "tracks": len(tracks), "kind": run_kind},
+            )
 
         self.logger.info(f"Starting metadata enrichment for {len(tracks)} tracks")
 
-        for track in tqdm(tracks, desc="Processing tracks", unit="track"):
-            track_name = track.get("name", "Unknown")
-            artist_name = track.get("artist", "Unknown")
-            track_num = results["processed"] + 1
+        pending_tracks = []
+        seen_keys = set()
 
-            self.logger.debug(
-                f"[{track_num}/{len(tracks)}] Processing: {artist_name} - {track_name}"
-            )
-
-            # Check cloud status: only process uploaded or matched tracks
-            cloud_status = track.get("cloudStatus", "")
-            if cloud_status and cloud_status not in ["uploaded", "matched"]:
-                self.logger.debug(
-                    f"  └─ Skipped: Cloud status is '{cloud_status}' (not uploaded/matched)"
-                )
-                results["skipped"] += 1
-                continue
-
-            filepath = track.get("filepath")
-            if not filepath or not self.detector.is_downloaded(filepath):
-                self.logger.debug(f"  └─ Skipped: File not downloaded or not found")
-                results["skipped"] += 1
-                continue
-
-            # Create track identifier
+        for index, track in enumerate(tracks):
+            filepath = track.get("filepath", "")
             track_id = TrackIdentifier(
                 artist=track.get("artist", ""),
                 title=track.get("name", ""),
                 album=track.get("album"),
             )
-
             if not track_id.is_complete():
-                self.logger.debug(f"  └─ Skipped: Incomplete track info (missing artist or title)")
                 results["skipped"] += 1
                 continue
 
-            # Read current tags
-            current_tags = self.tag_manager.read_tags(filepath)
-            self.logger.debug(
-                f"  └─ Current tags: BPM={current_tags.get('bpm')}, Year={current_tags.get('year')}, Genre={current_tags.get('genre')}"
-            )
-
-            # Enrich metadata
-            enriched = self.enricher.enrich_track(filepath, current_tags, track_id, force)
-
-            # Query databases
-            self.logger.debug(f"  └─ Querying databases for: {artist_name} - {track_name}")
-            entries = self.query_orchestrator.query_all_sources(track_id.artist, track_id.title)
-            self.logger.debug(f"  └─ Found {len(entries)} metadata entries from databases")
-
-            for entry in entries:
-                enriched.add_entry(entry)
-
-            # Write tags - only allow specific fields (year, bpm, genre, composer)
-            if enriched.entries:
-                ALLOWED_FIELDS = {"year", "bpm", "genre", "composer"}
-                tags_to_write = {
-                    e.field.value: e.value
-                    for e in enriched.entries.values()
-                    if e.field.value in ALLOWED_FIELDS
-                }
-                if tags_to_write:
-                    fields_str = ", ".join([f"{k}={v}" for k, v in tags_to_write.items()])
-                    self.logger.debug(f"  └─ Writing {len(tags_to_write)} fields: {fields_str}")
-                    success = self.tag_manager.write_tags(filepath, tags_to_write, force)
-                    if success:
-                        self.logger.info(
-                            f"  ✓ ENRICHED: {artist_name} - {track_name} ({fields_str})"
-                        )
-                        results["enriched"] += 1
-                    else:
-                        self.logger.warning(
-                            f"  ✗ FAILED to write tags: {artist_name} - {track_name}"
-                        )
-                        results["skipped"] += 1
-                else:
-                    self.logger.debug(f"  └─ Skipped: No writable fields available")
-                    results["skipped"] += 1
-            else:
-                self.logger.debug(f"  └─ Skipped: No enrichment data found")
+            cache_key = self._build_track_cache_key(filepath, track_id)
+            if not force and self._track_was_processed(cache_key, scope=scope):
+                self.logger.debug(
+                    f"Skipping already processed track: {track_id.artist} - {track_id.title}"
+                )
                 results["skipped"] += 1
+                self._mark_track_processed(
+                    cache_key,
+                    scope=scope,
+                    track_id=track_id,
+                    filepath=filepath,
+                    run_id=run.id if run else None,
+                    skip_reason="already processed",
+                )
+                continue
+            if cache_key in seen_keys:
+                self.logger.debug(f"Skipping duplicate track in batch: {track_id.artist} - {track_id.title}")
+                results["skipped"] += 1
+                self._mark_track_processed(
+                    cache_key,
+                    scope=scope,
+                    track_id=track_id,
+                    filepath=filepath,
+                    run_id=run.id if run else None,
+                    skip_reason="duplicate in batch",
+                )
+                continue
 
-            if self._embed_cover_art(
-                filepath,
-                artist=artist_name,
-                album=track.get("album"),
-                metadata=current_tags,
-            ):
-                results["cover_art_embedded"] += 1
+            seen_keys.add(cache_key)
+            pending_tracks.append((index + 1, track, track_id, cache_key))
 
-            results["processed"] += 1
+        total = len(tracks)
+
+        def _do_one(item: tuple) -> tuple:
+            track_num, track, track_id, cache_key = item
+            res = self._process_one_track(track, force, track_num, total)
+            return (track_id, track.get("filepath"), cache_key, res)
+
+        pairs = map_parallel(_do_one, pending_tracks, workers=workers, label="tracks")
+        for _item, outcome in pairs:
+            if isinstance(outcome, Exception):
+                results["skipped"] += 1
+                continue
+            track_id, filepath, cache_key, res = outcome
+            self._merge_track_result(results, res)
+            self._mark_track_processed(
+                cache_key,
+                scope=scope,
+                track_id=track_id,
+                filepath=filepath,
+                run_id=run.id if run else None,
+            )
 
         self.logger.info(f"\n{'='*80}")
         self.logger.info(f"Metadata Enrichment Complete")
@@ -388,9 +505,134 @@ class MetadataFiller:
         self.logger.info(f"Log file: data/logs/metadata_enrichment.log")
         self.logger.info(f"{'='*80}\n")
 
+        if run is not None:
+            self.state_store.finish_run(
+                run.id,
+                status="completed",
+                processed_items=results["processed"],
+                skipped_items=results["skipped"],
+                error_items=0,
+                details={"enriched": results["enriched"], "cover_art_embedded": results["cover_art_embedded"]},
+            )
+
         return results
 
-    def _process_files(self, audio_files: List[str], force: bool = False) -> Dict:
+    def _merge_track_result(self, totals: Dict, result: Dict) -> None:
+        for key in ("processed", "enriched", "skipped", "cover_art_embedded"):
+            totals[key] += result.get(key, 0)
+
+    def _process_one_track(self, track: Dict, force: bool, track_num: int, total_tracks: int) -> Dict:
+        results = {"processed": 0, "enriched": 0, "skipped": 0, "cover_art_embedded": 0}
+
+        track_name = track.get("name", "Unknown")
+        artist_name = track.get("artist", "Unknown")
+
+        self.logger.debug(
+            f"[{track_num}/{total_tracks}] Processing: {artist_name} - {track_name}"
+        )
+
+        # Check cloud status: only process uploaded or matched tracks
+        cloud_status = track.get("cloudStatus", "")
+        if cloud_status and cloud_status not in ["uploaded", "matched"]:
+            self.logger.debug(
+                f"  └─ Skipped: Cloud status is '{cloud_status}' (not uploaded/matched)"
+            )
+            results["skipped"] += 1
+            return results
+
+        filepath = track.get("filepath")
+        if not filepath or not self.detector.is_downloaded(filepath):
+            self.logger.debug(f"  └─ Skipped: File not downloaded or not found")
+            results["skipped"] += 1
+            return results
+
+        if not self.tag_manager.is_format_supported(filepath):
+            self.logger.warning(f"Skipping unsupported audio format: {filepath}")
+            results["skipped"] += 1
+            return results
+
+        # Create track identifier
+        track_id = TrackIdentifier(
+            artist=track.get("artist", ""),
+            title=track.get("name", ""),
+            album=track.get("album"),
+        )
+
+        if not track_id.is_complete():
+            self.logger.debug(f"  └─ Skipped: Incomplete track info (missing artist or title)")
+            results["skipped"] += 1
+            return results
+
+        # Read current tags
+        current_tags = self.tag_manager.read_tags(filepath)
+        self.logger.debug(
+            f"  └─ Current tags: BPM={current_tags.get('bpm')}, Year={current_tags.get('year')}, Genre={current_tags.get('genre')}"
+        )
+
+        # Enrich metadata
+        enriched = self.enricher.enrich_track(filepath, current_tags, track_id, force)
+
+        complete, missing = self.requirements.check_metadata_completeness(current_tags)
+        should_query = force or self.requirements.should_enrich(missing)
+
+        entries = []
+        if should_query:
+            self.logger.debug(f"  └─ Querying databases for: {artist_name} - {track_name}")
+            entries = self.query_orchestrator.query_all_sources(track_id.artist, track_id.title)
+            self.logger.debug(f"  └─ Found {len(entries)} metadata entries from databases")
+        else:
+            self.logger.debug("  └─ Skipped database queries: writable metadata fields complete")
+
+        for entry in entries:
+            enriched.add_entry(entry)
+
+        # Write tags - only allow specific fields (year, bpm, genre, composer)
+        if enriched.entries:
+            ALLOWED_FIELDS = {"year", "bpm", "genre", "composer"}
+            tags_to_write = {
+                e.field.value: e.value
+                for e in enriched.entries.values()
+                if e.field.value in ALLOWED_FIELDS
+            }
+            if tags_to_write:
+                fields_str = ", ".join([f"{k}={v}" for k, v in tags_to_write.items()])
+                self.logger.debug(f"  └─ Writing {len(tags_to_write)} fields: {fields_str}")
+                success = self.tag_manager.write_tags(filepath, tags_to_write, force)
+                if success:
+                    self.logger.info(
+                        f"  ✓ ENRICHED: {artist_name} - {track_name} ({fields_str})"
+                    )
+                    results["enriched"] += 1
+                else:
+                    self.logger.warning(
+                        f"  ✗ FAILED to write tags: {artist_name} - {track_name}"
+                    )
+                    results["skipped"] += 1
+            else:
+                self.logger.debug(f"  └─ Skipped: No writable fields available")
+                results["skipped"] += 1
+        elif should_query:
+            self.logger.debug(f"  └─ Skipped: No enrichment data found")
+            results["skipped"] += 1
+
+        if self._embed_cover_art(
+            filepath,
+            artist=artist_name,
+            album=track.get("album"),
+            metadata=current_tags,
+        ):
+            results["cover_art_embedded"] += 1
+
+        results["processed"] += 1
+        return results
+
+    def _process_files(
+        self,
+        audio_files: List[str],
+        force: bool = False,
+        workers: Optional[int] = None,
+        scope: str = "metadata_fill",
+    ) -> Dict:
         """
         Process audio files and fill metadata.
 
@@ -408,61 +650,159 @@ class MetadataFiller:
             "skipped": 0,
             "cover_art_embedded": 0,
         }
+        run = None
+        if hasattr(self, "state_store"):
+            run_kind = scope.split(":", 1)[0]
+            run = self.state_store.create_run(
+                "enrich",
+                target=scope,
+                payload={"force": force, "files": len(audio_files), "kind": run_kind},
+            )
 
-        for filepath in tqdm(audio_files, desc="Processing files", unit="file"):
-            # Read current tags
-            current_tags = self.tag_manager.read_tags(filepath)
+        pending_files = []
+        seen_keys = set()
 
-            artist = current_tags.get("artist", "")
-            title = current_tags.get("title", "")
-
-            if not artist or not title:
+        for filepath in audio_files:
+            current_tags = self.tag_manager.read_tags(filepath) if self.tag_manager.is_format_supported(filepath) else {}
+            track_id = TrackIdentifier(
+                artist=current_tags.get("artist", ""),
+                title=current_tags.get("title", ""),
+                album=current_tags.get("album"),
+            )
+            cache_key = self._build_track_cache_key(filepath, track_id)
+            if not force and self._track_was_processed(cache_key, scope=scope):
+                self.logger.debug(f"Skipping already processed file: {filepath}")
                 results["skipped"] += 1
+                self._mark_track_processed(
+                    cache_key,
+                    scope=scope,
+                    track_id=track_id,
+                    filepath=filepath,
+                    run_id=run.id if run else None,
+                    skip_reason="already processed",
+                )
                 continue
+            if cache_key in seen_keys:
+                self.logger.debug(f"Skipping duplicate file in batch: {filepath}")
+                results["skipped"] += 1
+                self._mark_track_processed(
+                    cache_key,
+                    scope=scope,
+                    track_id=track_id,
+                    filepath=filepath,
+                    run_id=run.id if run else None,
+                    skip_reason="duplicate in batch",
+                )
+                continue
+            seen_keys.add(cache_key)
+            pending_files.append((filepath, cache_key, track_id))
 
-            # Create track identifier
-            track_id = TrackIdentifier(artist=artist, title=title, album=current_tags.get("album"))
+        worker_count = self._resolve_worker_count(workers, len(pending_files))
+        if worker_count > 1:
+            self.logger.info(f"Processing files in parallel with {worker_count} workers")
+            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                futures = [
+                    executor.submit(
+                        self._process_one_file,
+                        filepath=filepath,
+                        force=force,
+                        _total_files=len(audio_files),
+                    )
+                    for filepath, _, _ in pending_files
+                ]
+                for (filepath, cache_key, track_id), future in zip(pending_files, futures):
+                    self._merge_track_result(results, future.result())
+                    self._mark_track_processed(
+                        cache_key,
+                        scope=scope,
+                        track_id=track_id,
+                        filepath=filepath,
+                        run_id=run.id if run else None,
+                    )
+        else:
+            for filepath, cache_key, track_id in tqdm(pending_files, desc="Processing files", unit="file"):
+                self._merge_track_result(
+                    results, self._process_one_file(filepath, force, len(audio_files))
+                )
+                self._mark_track_processed(
+                    cache_key,
+                    scope=scope,
+                    track_id=track_id,
+                    filepath=filepath,
+                    run_id=run.id if run else None,
+                )
 
-            # Enrich metadata
-            enriched = self.enricher.enrich_track(filepath, current_tags, track_id, force)
+        if run is not None:
+            self.state_store.finish_run(
+                run.id,
+                status="completed",
+                processed_items=results["processed"],
+                skipped_items=results["skipped"],
+                error_items=0,
+                details={"enriched": results["enriched"], "cover_art_embedded": results["cover_art_embedded"]},
+            )
 
-            # Query databases
+        return results
+
+    def _process_one_file(self, filepath: str, force: bool, _total_files: int) -> Dict:
+        results = {"processed": 0, "enriched": 0, "skipped": 0, "cover_art_embedded": 0}
+
+        if not self.tag_manager.is_format_supported(filepath):
+            self.logger.warning(f"Skipping unsupported audio format: {filepath}")
+            results["skipped"] += 1
+            return results
+
+        current_tags = self.tag_manager.read_tags(filepath)
+        artist = current_tags.get("artist", "")
+        title = current_tags.get("title", "")
+
+        if not artist or not title:
+            results["skipped"] += 1
+            return results
+
+        track_id = TrackIdentifier(artist=artist, title=title, album=current_tags.get("album"))
+
+        enriched = self.enricher.enrich_track(filepath, current_tags, track_id, force)
+
+        _complete, missing = self.requirements.check_metadata_completeness(current_tags)
+        should_query = force or self.requirements.should_enrich(missing)
+
+        entries = []
+        if should_query:
             entries = self.query_orchestrator.query_all_sources(artist, title)
 
-            for entry in entries:
-                enriched.add_entry(entry)
+        for entry in entries:
+            enriched.add_entry(entry)
 
-            # Write tags - only allow specific fields (year, bpm, genre, composer)
-            if enriched.entries:
-                ALLOWED_FIELDS = {"year", "bpm", "genre", "composer"}
-                tags_to_write = {
-                    e.field.value: e.value
-                    for e in enriched.entries.values()
-                    if e.field.value in ALLOWED_FIELDS
-                }
-                if tags_to_write:
-                    success = self.tag_manager.write_tags(filepath, tags_to_write, force)
-                    if success:
-                        self.logger.info(f"Enriched {len(tags_to_write)} fields: {title}")
-                        results["enriched"] += 1
-                    else:
-                        self.logger.warning(f"Failed to write tags: {title}")
-                        results["skipped"] += 1
+        if enriched.entries:
+            ALLOWED_FIELDS = {"year", "bpm", "genre", "composer"}
+            tags_to_write = {
+                e.field.value: e.value
+                for e in enriched.entries.values()
+                if e.field.value in ALLOWED_FIELDS
+            }
+            if tags_to_write:
+                success = self.tag_manager.write_tags(filepath, tags_to_write, force)
+                if success:
+                    self.logger.info(f"Enriched {len(tags_to_write)} fields: {title}")
+                    results["enriched"] += 1
                 else:
+                    self.logger.warning(f"Failed to write tags: {title}")
                     results["skipped"] += 1
             else:
                 results["skipped"] += 1
+        elif should_query:
+            results["skipped"] += 1
 
-            if self._embed_cover_art(
-                filepath,
-                artist=artist,
-                album=current_tags.get("album"),
-                metadata=current_tags,
-            ):
-                results["cover_art_embedded"] += 1
+        if self._embed_cover_art(
+            filepath,
+            artist=artist,
+            album=current_tags.get("album"),
+            metadata=current_tags,
+        ):
+            results["cover_art_embedded"] += 1
 
-            results["processed"] += 1
-
+        results["processed"] += 1
         return results
 
     def _embed_cover_art(
@@ -473,12 +813,17 @@ class MetadataFiller:
         metadata: Dict[str, str],
     ) -> bool:
         """Best-effort cover-art embedding for local audio files."""
+        if not self.tag_manager.is_format_supported(filepath):
+            return False
+
         mbid = (
             metadata.get("musicbrainz_release_id")
             or metadata.get("musicbrainz_albumid")
             or metadata.get("musicbrainz_releasegroupid")
         )
-        if not mbid:
+        if album and self._is_compilation_album_name(album):
+            return False
+        if not mbid and not (artist and album):
             return False
 
         try:
@@ -491,6 +836,13 @@ class MetadataFiller:
         except Exception as e:
             self.logger.debug(f"Cover art embedding failed for {filepath}: {e}")
             return False
+
+    def _is_compilation_album_name(self, album: str) -> bool:
+        """Return True for library bucket names that are too generic for cover lookup."""
+        value = album.strip().lower()
+        if value in {"compilations", "compilation", "various artists"}:
+            return True
+        return value in {"60s", "70s", "80s", "90s", "00s", "10s", "20s"}
 
     def _resolve_folder_path(self, folder_name: str) -> Optional[str]:
         """
@@ -531,12 +883,11 @@ class MetadataFiller:
             List of audio file paths
         """
         audio_files = []
-        supported_formats = self.detector.get_supported_formats()
 
         for filename in os.listdir(folder_path):
             filepath = os.path.join(folder_path, filename)
 
-            if os.path.isfile(filepath) and self.detector.is_audio_file(filepath):
+            if os.path.isfile(filepath) and self.tag_manager.is_format_supported(filepath):
                 audio_files.append(filepath)
 
         return audio_files
@@ -582,22 +933,31 @@ class MetadataFillCLI:
                     handler.setLevel(logging.DEBUG)
 
         # Log start of operation
-        target = args.playlist if args.playlist else args.folder
+        target = "all playlists" if getattr(args, "all_playlists", False) else "all songs" if getattr(args, "all_songs", False) else args.playlist if args.playlist else args.folder
         self.logger.info(f"Target: {target}")
         self.logger.info(f"Force overwrite: {getattr(args, 'force', False)}")
 
-        # Validate exactly one target is specified
-        if args.playlist and args.folder:
-            print(error("Specify either --playlist or --folder, not both"))
+        targets = [
+            bool(args.playlist),
+            bool(args.folder),
+            bool(getattr(args, "all_playlists", False)),
+            bool(getattr(args, "all_songs", False)),
+        ]
+        if sum(targets) > 1:
+            print(error("Specify only one target"))
             return 1
 
-        if not args.playlist and not args.folder:
+        if not any(targets):
             print(error("Must specify either --playlist or --folder"))
             return 1
 
         # Process target
         try:
-            if args.playlist:
+            if getattr(args, "all_playlists", False):
+                result = self.filler.fill_all_playlists(force=args.force)
+            elif getattr(args, "all_songs", False):
+                result = self.filler.fill_all_songs(force=args.force)
+            elif args.playlist:
                 result = self.filler.fill_playlist(args.playlist, force=args.force)
             else:  # args.folder
                 result = self.filler.fill_folder(args.folder, force=args.force)
@@ -638,6 +998,8 @@ def create_cli_parser() -> argparse.ArgumentParser:
     target_group = parser.add_mutually_exclusive_group(required=True)
     target_group.add_argument("--playlist", type=str, help="Playlist name to fill metadata for")
     target_group.add_argument("--folder", type=str, help="Folder path or name to fill metadata for")
+    target_group.add_argument("--all-playlists", action="store_true", help="Fill metadata for every Apple Music user playlist")
+    target_group.add_argument("--all-songs", action="store_true", help="Fill metadata for all Apple Music library songs")
 
     # Options
     parser.add_argument(

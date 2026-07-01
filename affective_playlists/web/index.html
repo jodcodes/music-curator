@@ -21,6 +21,7 @@
                 <li><a href="#" data-view="analyze" class="nav-link">Analyze</a></li>
                 <li><a href="#" data-view="organize" class="nav-link">Organize</a></li>
                 <li><button type="button" class="nav-link" data-view="curation">Curation Review</button></li>
+                <li><a href="#" data-view="history" class="nav-link">History</a></li>
             </ul>
             <div class="nav-actions">
                 <button id="themeToggle" class="btn-icon" title="Toggle theme">☀️</button>
@@ -285,6 +286,53 @@
                         <button class="btn btn-primary" id="curation-apply-btn" type="button" disabled>1-Track Apply testen</button>
                         <div id="curation-change-panel" class="curation-change-panel"></div>
                     </aside>
+                </div>
+            </section>
+
+            <!-- History View -->
+            <section id="history" class="view">
+                <div class="card">
+                    <h3>Library Runs</h3>
+                    <p class="text-muted">Persistent history of enrichment, dedupe, scan and organize runs.</p>
+                    <div id="historyRunsTableContainer" class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr><th>ID</th><th>Type</th><th>Target</th><th>Status</th><th>Processed</th><th>Skipped</th><th>Started</th></tr>
+                            </thead>
+                            <tbody id="historyRunsBody">
+                                <tr><td colspan="7" class="text-center text-muted">Loading…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Background Jobs</h3>
+                    <div id="historyJobsTableContainer" class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr><th>ID</th><th>Type</th><th>Status</th><th>Progress</th><th>Created</th></tr>
+                            </thead>
+                            <tbody id="historyJobsBody">
+                                <tr><td colspan="5" class="text-center text-muted">Loading…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Dedup History</h3>
+                    <p class="text-muted">Tracks seen across all enrichment runs.</p>
+                    <div id="historyDedupTableContainer" class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr><th>Artist</th><th>Title</th><th>Album</th><th>Scope</th><th>Skip reason</th><th>Last seen</th></tr>
+                            </thead>
+                            <tbody id="historyDedupBody">
+                                <tr><td colspan="6" class="text-center text-muted">Loading…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
         </div>

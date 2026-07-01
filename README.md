@@ -1,16 +1,16 @@
 # Music Curator
 
-Personal music automation tools for Apple Music, Spotify playlist sync, and local library maintenance.
+Umbrella workspace for music automation tools. The product surface is `affective_playlists`; `apple2spfy` stays separate.
 
 Requires macOS for commands that talk to Music.app. Some read-only tests run on Linux in CI.
 
-This repo is intentionally split into small tools instead of one shared framework. Some duplication is cheaper than a brittle abstraction.
+`affective_playlists` now also owns the bundled maintenance scripts from `music_tools`, so one CLI covers curation, dedupe, cleanup, and enrichment.
 
 ## Tools
 
-- [`affective_playlists/`](affective_playlists/) — Apple Music playlist curation: 4tempers mood buckets, Fav Songs genre/temper folders, metadata enrichment, playlist organization.
+- [`affective_playlists/`](affective_playlists/) — Apple Music playlist curation plus bundled maintenance scripts.
 - [`apple2spfy/`](apple2spfy/) — Apple Music to Spotify playlist sync/export helpers.
-- [`music_tools/`](music_tools/) — small operational scripts for local music-library cleanup and maintenance.
+- [`music_tools/`](music_tools/) — legacy script home; now wired into `affective_playlists tools`.
 
 ## Safety
 
@@ -25,7 +25,7 @@ python3 music_curator.py --list
 python3 music_curator.py
 python3 music_curator.py affective --help
 python3 music_curator.py apple2spfy --help
-python3 music_curator.py music-tools
+python3 music_curator.py music-tools --list
 
 cd affective_playlists
 python -m pytest tests/test_curation_models.py tests/test_curation_service.py tests/test_apple_music_structure.py -q
@@ -56,4 +56,4 @@ Copy `.env.example` to `.env` only for local use. Never commit real tokens, expo
 
 ## Repo Plan
 
-See [`docs/music-curator-abstraction-plan.md`](docs/music-curator-abstraction-plan.md). Short version: keep the tools separate, only extract shared code when two tools actively need the same behavior.
+See [`docs/music-curator-abstraction-plan.md`](docs/music-curator-abstraction-plan.md). Short version: keep `apple2spfy` separate, but treat `affective_playlists` + `music_tools` as one product surface.

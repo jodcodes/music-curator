@@ -1,27 +1,25 @@
 # Music Curator Abstraction Plan
 
-Goal: make this repository publishable on GitHub without over-abstracting the working music workflows.
+Goal: keep the family of music tools coherent without over-abstracting the working workflows.
 
 ## 1. Repo Boundary
 
-- Keep one top-level product: `music-curator`.
-- Treat `affective_playlists`, `apple2spfy`, and `music_tools` as packages/modules under one repo, not separate hidden projects.
-- Move shared code only when at least two modules use it.
+- Keep one top-level family name: `music-curator`.
+- Treat `affective_playlists` as the main product repo surface.
+- Keep `apple2spfy` separate.
+- Keep `music_tools` as bundled commands inside `affective_playlists`, not a separate product boundary.
+- Move shared code only when at least two feature areas use it.
 
 Suggested target layout:
 
 ```text
 music-curator/
-  packages/
-    affective_playlists/
-    apple2spfy/
-  tools/
-    scripts/
+  affective_playlists/
+  apple2spfy/
+  music_tools/   # bundled through affective_playlists tools
   docs/
   tests/
-  pyproject.toml
   README.md
-  .env.example
 ```
 
 ## 2. Shared Core Layer
@@ -40,9 +38,9 @@ Do not move feature-specific behavior into core. Core should be boring plumbing.
 
 Keep features as thin, independent services:
 
-- `affective_playlists` — temperament, Fav Songs curation, metadata enrichment, playlist organization
+- `affective_playlists` — temperament, Fav Songs curation, metadata enrichment, playlist organization, and bundled maintenance commands
 - `apple2spfy` — playlist sync/export/cache
-- `music_tools/scripts` — one-off operational scripts until reused, then promote into package code
+- `music_tools` — operational scripts invoked through the `affective_playlists tools` command group
 
 Each feature should expose:
 
@@ -84,9 +82,9 @@ Start small:
 ## 7. Migration Order
 
 1. Add top-level README, LICENSE, `.gitignore`, and publish-safe `.env.example`.
-2. Keep current folders; avoid layout moves until tests are stable.
+2. Keep current folders, but expose the merged `affective_playlists` command surface consistently.
 3. Centralize duplicated config/utilities only when touched by active work.
 4. Introduce `pyproject.toml` and one CLI entrypoint.
-5. Move to `packages/` layout only if packaging or imports require it.
+5. Move to a package/workspace layout only if packaging or imports require it.
 
 Principle: abstract seams, not dreams. If only one feature uses code, leave it local.

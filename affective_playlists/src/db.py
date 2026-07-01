@@ -183,6 +183,85 @@ class JobStatistics(Base):
         return f"<JobStatistics(type={self.job_type}, completed={self.total_completed})>"
 
 
+class LibraryRun(Base):
+    """Library run - persistent history for CLI and service operations."""
+
+    __tablename__ = "library_runs"
+
+    id = Column(String(128), primary_key=True)
+    run_type = Column(String(50), nullable=False, index=True)  # enrich, dedupe, organize, tools
+    target = Column(String(256), nullable=True, index=True)
+    status = Column(String(20), nullable=False, index=True, default="running")
+    payload = Column(JSON, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now, index=True)
+    started_at = Column(DateTime, nullable=False, default=utc_now)
+    completed_at = Column(DateTime, nullable=True)
+    total_items = Column(Integer, default=0)
+    processed_items = Column(Integer, default=0)
+    skipped_items = Column(Integer, default=0)
+    error_items = Column(Integer, default=0)
+    details = Column(JSON, nullable=True)
+
+    def __repr__(self):
+        return f"<LibraryRun(id={self.id}, type={self.run_type}, status={self.status})>"
+
+    def to_dict(self):
+        """Convert to API-friendly dictionary."""
+        return {
+            "id": self.id,
+            "run_type": self.run_type,
+            "target": self.target,
+            "status": self.status,
+            "payload": self.payload,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "total_items": self.total_items,
+            "processed_items": self.processed_items,
+            "skipped_items": self.skipped_items,
+            "error_items": self.error_items,
+            "details": self.details,
+        }
+
+
+class TrackDedupHistory(Base):
+    """Track deduplication history for explainable skip decisions."""
+
+    __tablename__ = "track_dedup_history"
+
+    id = Column(Integer, primary_key=True)
+    scope = Column(String(80), nullable=False, index=True)
+    track_key = Column(String(512), nullable=False, index=True)
+    artist = Column(String(256), nullable=True, index=True)
+    title = Column(String(256), nullable=True, index=True)
+    album = Column(String(256), nullable=True, index=True)
+    filepath = Column(String(1024), nullable=True)
+    run_id = Column(String(128), nullable=True, index=True)
+    seen_at = Column(DateTime, nullable=False, default=utc_now, index=True)
+    last_seen_at = Column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
+    skip_reason = Column(Text, nullable=True)
+    source = Column(String(80), nullable=True)
+
+    def __repr__(self):
+        return f"<TrackDedupHistory(scope={self.scope}, key={self.track_key})>"
+
+
+class StateCacheEntry(Base):
+    """Generic persistent cache entry for product-level state."""
+
+    __tablename__ = "state_cache_entries"
+
+    cache_key = Column(String(512), primary_key=True)
+    cache_type = Column(String(80), nullable=False, index=True)
+    cache_value = Column(JSON, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+    updated_at = Column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
+    expires_at = Column(DateTime, nullable=True, index=True)
+
+    def __repr__(self):
+        return f"<StateCacheEntry(type={self.cache_type}, key={self.cache_key})>"
+
+
 # Database initialization
 def get_database_url() -> str:
     """Get database URL from environment or default."""
