@@ -530,7 +530,7 @@ class TestCeleryConfiguration:
         """Task names follow convention: curator.tasks.{type}:{function}."""
         expected_names = [
             "curator.tasks.enrichment:enrich_metadata",
-            "curator.tasks.temperament:analyze_mood",
+            "curator.tasks.mood:analyze_mood",
             "curator.tasks.organization:organize_playlists",
         ]
 

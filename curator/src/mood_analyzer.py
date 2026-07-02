@@ -84,7 +84,7 @@ load_dotenv()
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("temperament_analyzer.log"), logging.StreamHandler()],
+    handlers=[logging.FileHandler("mood_analyzer.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
@@ -902,7 +902,7 @@ def main():
             print("=" * 60)
             print("\nResults saved to:")
             print("  - temperament_analysis_results.json")
-            print("  - temperament_analyzer.log")
+            print("  - mood_analyzer.log")
             print("\n")
             return 0
         else:

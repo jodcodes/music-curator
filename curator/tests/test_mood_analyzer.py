@@ -10,7 +10,7 @@ import os
 import sys
 from typing import Dict, List
 
-from src.temperament_analyzer import (
+from src.mood_analyzer import (
     ClassificationResult,
     LLMClient,
     MusicLibraryClient,
@@ -159,7 +159,7 @@ def main():
             print("The script is working correctly!")
             print("Next steps:")
             print("  1. Set up your API credentials (see SETUP.md)")
-            print("  2. Run: python temperament_analyzer.py")
+            print("  2. Run: python mood_analyzer.py")
             print()
         else:
             print()

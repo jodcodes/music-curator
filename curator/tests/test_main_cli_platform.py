@@ -70,7 +70,7 @@ class TestCLIPlatformGuards:
             importlib.reload(main)
 
             # Simulate running temperament analysis
-            result = main.run_temperament_analysis()
+            result = main.run_mood_analysis()
             assert result == 1, "Expected exit code 1 for non-macOS temperament"
 
     def test_playlist_enrichment_on_non_macos_exits_with_error(self):
@@ -159,7 +159,7 @@ class TestAPIKeyValidation:
                         with patch("main.TemperamentAnalyzer"):
                             mock_music.return_value.authenticate.return_value = False
 
-                            result = main.run_temperament_analysis()
+                            result = main.run_mood_analysis()
                             # It should get past API key validation and fail on Music.app auth
                             assert result == 1  # Failed due to Music.app, not API key
                             mock_llm.assert_called_once()  # LLM client was created
@@ -430,7 +430,6 @@ def test_enrich_subcommand_accepts_all_modes(monkeypatch):
             calls.append(
                 {
                     "all_playlists": args.all_playlists,
-                    "all_songs": args.all_songs,
                     "playlist": args.playlist,
                     "folder": args.folder,
                 }
@@ -440,11 +439,11 @@ def test_enrich_subcommand_accepts_all_modes(monkeypatch):
     monkeypatch.setattr(main, "IS_MACOS", True)
     monkeypatch.setattr("src.metadata_fill.MetadataFillCLI", FakeCLI)
 
-    assert main.main(["enrich", "--all-playlists"]) == 0
-    assert main.main(["enrich", "--all-songs"]) == 0
+    assert main.main(["enrich", "--library"]) == 0
+    assert main.main(["enrich", "--playlist", "My Mix"]) == 0
     assert calls == [
-        {"all_playlists": True, "all_songs": False, "playlist": None, "folder": None},
-        {"all_playlists": False, "all_songs": True, "playlist": None, "folder": None},
+        {"all_playlists": True, "playlist": None, "folder": None},
+        {"all_playlists": False, "playlist": "My Mix", "folder": None},
     ]
 
 

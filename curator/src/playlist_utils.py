@@ -7,7 +7,7 @@ Consolidates:
 - Whitelist filtering
 - Playlist fetching and caching
 
-Previously scattered across temperament_analyzer.py, metadata_fill.py, and plsort.py.
+Previously scattered across mood_analyzer.py, metadata_fill.py, and plsort.py.
 """
 
 import difflib

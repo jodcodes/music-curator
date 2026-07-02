@@ -46,7 +46,7 @@ app.conf.update(
     task_routes={
         "curator.tasks.curation:apply_curation": {"queue": "default"},
         "curator.tasks.enrichment:enrich_metadata": {"queue": "enrichment"},
-        "curator.tasks.temperament:analyze_mood": {"queue": "mood"},
+        "curator.tasks.mood:analyze_mood": {"queue": "mood"},
         "curator.tasks.organization:organize_playlists": {"queue": "organization"},
         "curator.tasks.cleanup:cleanup_old_jobs": {"queue": "background"},
     },

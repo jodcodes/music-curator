@@ -158,7 +158,7 @@ def enrich_metadata(
 
 @app.task(
     bind=True,
-    name="curator.tasks.temperament:analyze_mood",
+    name="curator.tasks.mood:analyze_mood",
     base=app.Task,
 )
 def analyze_mood(

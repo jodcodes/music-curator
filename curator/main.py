@@ -50,14 +50,14 @@ logger = setup_logger("curator")
 IS_MACOS = sys.platform == "darwin"
 
 # Import main modules
-temperament_analyzer = None
+mood_analyzer = None
 metadata_fill = None
 plsort_module = None  # type: ignore
 
 try:
-    from src.temperament_analyzer import TemperamentAnalyzer, MusicAppClient, OpenAILLMClient
+    from src.mood_analyzer import TemperamentAnalyzer, MusicAppClient, OpenAILLMClient
 
-    temperament_analyzer = sys.modules.get("src.temperament_analyzer")
+    mood_analyzer = sys.modules.get("src.mood_analyzer")
 except ImportError as e:
     logger.warning(f"Could not import temperament_analyzer: {e}")
 
@@ -103,7 +103,7 @@ def require_macos(feature_name: str) -> bool:
     return False
 
 
-def run_temperament_analysis(args=None):
+def run_mood_analysis(args=None):
     """Run 4tempers - AI temperament analysis."""
     print_header("🎭 Temperament Analysis", "AI-based Playlist Emotion Classification")
 
@@ -159,13 +159,17 @@ def run_metadata_enrichment(args=None):
         if args and (
             getattr(args, "playlist", None)
             or getattr(args, "folder", None)
-            or getattr(args, "all_playlists", False)
-            or getattr(args, "all_songs", False)
+            or getattr(args, "library", False)
         ):
-            if getattr(args, "playlist", None) and not require_macos("Playlist enrichment"):
+            if (getattr(args, "playlist", None) or getattr(args, "library", False)) and not require_macos("Apple Music enrichment"):
                 return 1
-            if (getattr(args, "all_playlists", False) or getattr(args, "all_songs", False)) and not require_macos("Apple Music enrichment"):
-                return 1
+            # Map new --library flag to legacy all_playlists for MetadataFillCLI
+            if getattr(args, "library", False):
+                args.all_playlists = True
+                args.all_songs = False
+            else:
+                args.all_playlists = False
+                args.all_songs = False
             cli = MetadataFillCLI()
             return cli.run(args)
 
@@ -691,7 +695,7 @@ def show_interactive_menu():
             choice = Menu.select("Select a feature to run", features)
 
             if choice == 0:
-                return run_temperament_analysis()
+                return run_mood_analysis()
             elif choice == 1:
                 return run_metadata_enrichment()
             elif choice == 2:
@@ -747,17 +751,17 @@ def main(argv=None):
         )
         return feature_parser
 
-    add_feature_parser("mood", "Analyse playlist mood via AI (was: temperament)")
-    enrich_parser = add_feature_parser("enrich", "Run metadata enrichment")
-    enrich_target = enrich_parser.add_mutually_exclusive_group()
-    enrich_target.add_argument("--playlist", help="Apple Music playlist name to enrich")
-    enrich_target.add_argument("--folder", help="Local audio folder path or name to enrich")
-    enrich_target.add_argument(
-        "--all-playlists", action="store_true", help="Enrich every Apple Music user playlist"
-    )
-    enrich_target.add_argument(
-        "--all-songs", action="store_true", help="Enrich every song in the Apple Music library"
-    )
+    mood_parser = add_feature_parser("mood", "Analyse playlist mood via AI")
+    mood_scope = mood_parser.add_mutually_exclusive_group()
+    mood_scope.add_argument("--library", action="store_true", help="Analyse mood for all playlists")
+    mood_scope.add_argument("--playlist", help="Apple Music playlist name to analyse")
+    mood_parser.add_argument("--apply", action="store_true", help="Move playlists to mood folders")
+
+    enrich_parser = add_feature_parser("enrich", "Fill metadata from music databases")
+    enrich_scope = enrich_parser.add_mutually_exclusive_group()
+    enrich_scope.add_argument("--library", action="store_true", help="Enrich every song in the library")
+    enrich_scope.add_argument("--playlist", help="Apple Music playlist name to enrich")
+    enrich_scope.add_argument("--folder", help="Local audio folder path or name to enrich")
     enrich_parser.add_argument(
         "--force", action="store_true", help="Overwrite existing metadata fields"
     )
@@ -864,7 +868,7 @@ def main(argv=None):
 
     # Run selected feature
     if args.feature == "mood":
-        return run_temperament_analysis()
+        return run_mood_analysis()
     elif args.feature == "enrich":
         return run_metadata_enrichment(args)
     elif args.feature == "organize":

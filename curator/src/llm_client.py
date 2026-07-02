@@ -5,13 +5,13 @@ LLM Client Implementations
 Provides different LLM providers for music temperament classification:
 - MockLLMClient: Keyword-based heuristics (free, no API key needed)
 - AnthropicLLMClient: Claude AI (requires ANTHROPIC_API_KEY)
-- OpenAILLMClient: (from temperament_analyzer.py)
+- OpenAILLMClient: (from mood_analyzer.py)
 """
 
 import random
 from typing import List
 
-from src.temperament_analyzer import ClassificationResult, LLMClient, Playlist, Temperament, Track
+from src.mood_analyzer import ClassificationResult, LLMClient, Playlist, Temperament, Track
 
 
 class MockLLMClient(LLMClient):
