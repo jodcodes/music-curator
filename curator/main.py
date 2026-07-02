@@ -245,6 +245,8 @@ def run_playlist_organization(args=None):
             print(error("plsort module not available"))
             return 1
 
+        apply = getattr(args, "apply", False) if args else False
+
         # Check if whitelist is enabled
         whitelist_enabled, whitelist = load_centralized_whitelist()
 
@@ -257,7 +259,13 @@ def run_playlist_organization(args=None):
         print(warning("⚠️  This will ACTUALLY MOVE playlists in Apple Music!"))
         print()
 
-        # Show dry-run warning
+        if not apply:
+            print(info("Dry-run mode — showing what would be organized. Pass --apply to execute."))
+            result = plsort_module.main(args=["--no-interactive", "--dry-run"])
+            print_footer()
+            return result if result is not None else 0
+
+        # Live apply — prompt confirmation
         if not Menu.confirm("Continue with playlist organization?", default=False):
             print(info("Organization cancelled"))
             return 0
@@ -389,46 +397,28 @@ def run_curation(args=None):
 
 def run_scan(args=None):
     """Scan Apple Music library and show summary stats."""
-    import json
-
     if not require_macos("scan"):
         return 1
     print_header("🔍 Library Scan", "Apple Music library overview")
     try:
         am = AppleMusicInterface()
         playlists = am.get_playlists() or []
-        all_tracks = am.get_all_tracks() or []
+        track_count = am.get_track_count()
         print(info(f"Playlists:  {len(playlists)}"))
-        print(info(f"Tracks:     {len(all_tracks)}"))
-
-        # Artist/album quick stats
-        artists: set = set()
-        albums: set = set()
-        missing_meta = 0
-        for t in all_tracks:
-            if t.get("artist"):
-                artists.add(t["artist"])
-            if t.get("album"):
-                albums.add(t["album"])
-            if not t.get("genre") or not t.get("year"):
-                missing_meta += 1
-
-        print(info(f"Artists:    {len(artists)}"))
-        print(info(f"Albums:     {len(albums)}"))
-        print(info(f"Missing genre/year: {missing_meta} tracks"))
+        print(info(f"Tracks:     {track_count}"))
 
         # Persist as a library run
         store = LibraryStateStore()
         run = store.create_run(
             "scan",
             target="library",
-            payload={"playlists": len(playlists), "tracks": len(all_tracks)},
+            payload={"playlists": len(playlists), "tracks": track_count},
         )
         store.finish_run(
             run.id,
             status="completed",
-            processed_items=len(all_tracks),
-            details={"artists": len(artists), "albums": len(albums), "missing_meta": missing_meta},
+            processed_items=track_count,
+            details={"playlists": len(playlists)},
         )
         print(success(f"Scan recorded as run {run.id}"))
     except Exception as e:
@@ -497,28 +487,31 @@ def run_dedupe(args=None):
 
     try:
         am = AppleMusicInterface()
-        playlists = am.get_playlists() or []
+        print(info("Fetching all playlist tracks (one AppleScript call)..."))
+        flat = am.get_all_playlists_tracks_flat()
+
         seen: dict = {}
         dupes = []
-        for pl in playlists:
-            tracks = am.get_playlist_tracks(pl.get("name", "")) or []
-            for t in tracks:
-                key = build_track_key(
-                    artist=t.get("artist", ""),
-                    title=t.get("name", t.get("title", "")),
-                    album=t.get("album"),
-                )
-                if key in seen:
-                    dupes.append({
-                        "track": t.get("name", "?"),
-                        "artist": t.get("artist", "?"),
-                        "in": pl.get("name", "?"),
-                        "also_in": seen[key],
-                    })
-                else:
-                    seen[key] = pl.get("name", "?")
+        playlists_seen: set = set()
+        for entry in flat:
+            pl_name = entry.get("playlist", "")
+            playlists_seen.add(pl_name)
+            key = build_track_key(
+                artist=entry.get("artist", ""),
+                title=entry.get("name", ""),
+                album=entry.get("album"),
+            )
+            if key in seen:
+                dupes.append({
+                    "track": entry.get("name", "?"),
+                    "artist": entry.get("artist", "?"),
+                    "in": pl_name,
+                    "also_in": seen[key],
+                })
+            else:
+                seen[key] = pl_name
 
-        print(info(f"Playlists scanned: {len(playlists)}"))
+        print(info(f"Playlists scanned: {len(playlists_seen)}"))
         print(info(f"Unique tracks:     {len(seen)}"))
         print(info(f"Duplicates found:  {len(dupes)}"))
         if dupes:

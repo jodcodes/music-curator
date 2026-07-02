@@ -472,11 +472,8 @@ class TestScanCommand:
         class FakeAM:
             def get_playlists(self):
                 return [{"id": "p1", "name": "Test"}]
-            def get_all_tracks(self):
-                return [
-                    {"artist": "A", "name": "T", "genre": "Rock", "year": 2020},
-                    {"artist": "B", "name": "T2"},  # missing genre/year
-                ]
+            def get_track_count(self):
+                return 2
 
         monkeypatch.setattr(main, "AppleMusicInterface", lambda: FakeAM())
 
@@ -530,12 +527,10 @@ class TestDedupeCommand:
         monkeypatch.setattr(main, "IS_MACOS", True)
 
         class FakeAM:
-            def get_playlists(self):
-                return [{"id": "p1", "name": "Mix"}]
-            def get_playlist_tracks(self, name):
+            def get_all_playlists_tracks_flat(self):
                 return [
-                    {"artist": "A", "name": "Song", "album": "AL"},
-                    {"artist": "A", "name": "Song", "album": "AL"},  # dup
+                    {"playlist": "Mix", "artist": "A", "name": "Song", "album": "AL"},
+                    {"playlist": "Mix", "artist": "A", "name": "Song", "album": "AL"},  # dup
                 ]
 
         monkeypatch.setattr(main, "AppleMusicInterface", lambda: FakeAM())

@@ -896,3 +896,63 @@ end tell
     def get_all_tracks(self) -> List[Dict]:
         """Return all tracks from the Apple Music library."""
         return self.get_library_tracks()
+
+    def get_track_count(self) -> int:
+        """Return the number of tracks in the library via a fast single-value query."""
+        script = """
+tell application "Music"
+    try
+        return count of tracks of library playlist 1
+    on error
+        return 0
+    end try
+end tell
+"""
+        ok, output = self._run_applescript(script)
+        if not ok or not output:
+            return 0
+        try:
+            return int(output.strip())
+        except ValueError:
+            return 0
+
+    def get_all_playlists_tracks_flat(self) -> List[Dict]:
+        """Return all user-playlist tracks in ONE AppleScript call.
+
+        Each dict: {playlist, name, artist, album}
+        Much faster than one call per playlist for large libraries.
+        """
+        script = """
+tell application "Music"
+    set lines to {}
+    repeat with pl in user playlists
+        set plName to name of pl
+        try
+            repeat with trk in tracks of pl
+                set tName to name of trk
+                set tArtist to artist of trk
+                set tAlbum to album of trk
+                set end of lines to (plName & "|||" & tName & "|||" & tArtist & "|||" & tAlbum)
+            end repeat
+        end try
+    end repeat
+    set AppleScript's text item delimiters to linefeed
+    set result to lines as text
+    set AppleScript's text item delimiters to ""
+    return result
+end tell
+"""
+        ok, output = self._run_applescript(script)
+        if not ok or not output:
+            return []
+        results = []
+        for line in output.splitlines():
+            parts = line.split("|||")
+            if len(parts) >= 2:
+                results.append({
+                    "playlist": parts[0],
+                    "name": parts[1],
+                    "artist": parts[2] if len(parts) > 2 else "",
+                    "album": parts[3] if len(parts) > 3 else "",
+                })
+        return results
