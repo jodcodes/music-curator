@@ -1,15 +1,15 @@
 # 🎵 Music Tools
 
-Legacy script home for the bundled maintenance commands that now ship through `affective_playlists tools`.
+Legacy script home for the bundled maintenance commands that now ship through `curator tools`.
 
-The scripts stay standalone JXA files, but the product surface is unified in `affective_playlists`.
+The scripts stay standalone JXA files, but the product surface is unified in `curator`.
 
 ## Was läuft
 
 | Script | Zweck | Wo |
 |---|---|---|
-| `scripts/sort_favourites_by_genre.js` | Holt alle Tracks aus der Playlist „Favourite Songs" und sortiert sie in `♥ <Kategorie>` Playlisten (gleiche Fav-Songs-Genres wie affective_playlists – 1:1-Port von `curation_models.normalize_fav_genre_label`). | im Wrapper |
-| `../affective_playlists/main.py curate --scope fav_songs` | Preview/Dry-Run für die neue Struktur `Fav Songs / <Genre> / Fav <Genre> <Temper>`. Läuft zusätzlich zum alten Sorter, bis die Apple-Music-Library angeschlossen und der Dry-Run akzeptiert ist. | im Wrapper |
+| `scripts/sort_favourites_by_genre.js` | Holt alle Tracks aus der Playlist „Favourite Songs" und sortiert sie in `♥ <Kategorie>` Playlisten (gleiche Fav-Songs-Genres wie curator – 1:1-Port von `curation_models.normalize_fav_genre_label`). | im Wrapper |
+| `../curator/main.py curate --scope fav_songs` | Preview/Dry-Run für die neue Struktur `Fav Songs / <Genre> / Fav <Genre> <Temper>`. Läuft zusätzlich zum alten Sorter, bis die Apple-Music-Library angeschlossen und der Dry-Run akzeptiert ist. | im Wrapper |
 | `scripts/route_albums_to_playlists.scpt` | Geht eine fest verdrahtete Mapping-Tabelle (Album-Name → Playlist-Name) durch und fügt seit dem letzten Lauf neu in die Library aufgenommene Tracks dieser Alben in die jeweilige Ziel-Playlist ein. | im Wrapper |
 | `scripts/find_playlist_duplicates.js` | Geht alle User-Playlists durch und entfernt Duplikate. Tie-Break: eigene Tracks gewinnen gegen Apple-Music-Streaming-Tracks; bei gleicher Herkunft gewinnt das frühere `dateAdded`. Smart-Playlists und „Favourite Songs" werden übersprungen. `--dry-run` für reines Logging. | im Wrapper |
 | `scripts/cleanup_old_genre_playlists.js` | **Manuell.** Löscht veraltete `♥ <Kategorie>` Playlisten, deren Name nicht mehr zur aktuellen Taxonomie von `sort_favourites_by_genre.js` passt. Betrachtet nur `♥ …` Playlisten; Smart-Playlisten/Ordner/System bleiben unangetastet. **Default Dry-Run**, echtes Löschen nur mit `--apply`. | manuell |
