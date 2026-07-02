@@ -2,7 +2,7 @@
 Music maintenance tool registry.
 
 These scripts stay standalone JXA files, but the CLI treats them as part of the
-affective_playlists product surface.
+curator product surface.
 """
 
 from dataclasses import dataclass

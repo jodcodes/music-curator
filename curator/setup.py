@@ -1,9 +1,9 @@
 """
-Setup script for affective_playlists.
+Setup script for curator.
 
 Installs the package and creates a CLI command that can be run from anywhere.
 Usage: pip install -e .
-Then: affective-playlists or affective_playlists from any directory
+Then: curator from any directory
 """
 
 from setuptools import setup, find_packages
@@ -15,13 +15,13 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
     requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
 
 setup(
-    name="affective-playlists",
+    name="curator",
     version="1.0.0",
     author="Joel Debeljak",
     description="Unified music analysis and organization tool",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/jodcodes/affective_playlists",
+    url="https://github.com/jodcodes/music-curator",
     packages=find_packages(include=["src", "src.*"]),
     package_dir={"": "."},
     classifiers=[
@@ -36,8 +36,8 @@ setup(
     install_requires=requirements,
     entry_points={
         "console_scripts": [
-            "affective-playlists=main:main",
-            "affective_playlists=main:main",
+            "curator=main:main",
+            
         ],
     },
     include_package_data=True,

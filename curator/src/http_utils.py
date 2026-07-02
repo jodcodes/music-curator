@@ -27,7 +27,7 @@ class HttpClient:
     def __init__(
         self,
         logger: Optional[logging.Logger] = None,
-        user_agent: str = "affective-playlists/1.0",
+        user_agent: str = "curator/1.0",
         retries: int = 2,
         retry_delay: float = 0.25,
     ):

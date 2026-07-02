@@ -1,5 +1,5 @@
 """
-Fun and engaging CLI UI utilities for affective_playlists.
+Fun and engaging CLI UI utilities for curator.
 
 This module provides a collection of CLI UI components that make
 interacting with the application more engaging and user-friendly.

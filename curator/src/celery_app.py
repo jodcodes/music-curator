@@ -16,7 +16,7 @@ from src.logger import setup_logger
 logger = setup_logger(__name__)
 
 # Initialize Celery app
-app = Celery("affective_playlists")
+app = Celery("curator")
 
 # Configuration
 app.conf.update(
@@ -44,11 +44,11 @@ app.conf.update(
     worker_concurrency=int(os.getenv("CELERY_WORKER_CONCURRENCY", "2")),
     # Task routing
     task_routes={
-        "affective_playlists.tasks.curation:apply_curation": {"queue": "default"},
-        "affective_playlists.tasks.enrichment:enrich_metadata": {"queue": "enrichment"},
-        "affective_playlists.tasks.temperament:analyze_mood": {"queue": "temperament"},
-        "affective_playlists.tasks.organization:organize_playlists": {"queue": "organization"},
-        "affective_playlists.tasks.cleanup:cleanup_old_jobs": {"queue": "background"},
+        "curator.tasks.curation:apply_curation": {"queue": "default"},
+        "curator.tasks.enrichment:enrich_metadata": {"queue": "enrichment"},
+        "curator.tasks.temperament:analyze_mood": {"queue": "mood"},
+        "curator.tasks.organization:organize_playlists": {"queue": "organization"},
+        "curator.tasks.cleanup:cleanup_old_jobs": {"queue": "background"},
     },
 )
 

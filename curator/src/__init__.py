@@ -1,5 +1,5 @@
 """
-affective_playlists - Unified music analysis and organization package.
+curator - Unified music analysis and organization package.
 
 Combines three core subsystems:
 1. 4tempers - AI-based playlist temperament analysis

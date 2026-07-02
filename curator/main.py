@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
 """
-affective_playlists - Unified CLI Entry Point
+curator - Unified CLI Entry Point
 
-Unified application that combines:
-1. 4tempers - AI-based playlist temperament analysis
-2. metad_enr - Metadata filling and enrichment
-3. plsort - Playlist organization and classification
+Apple Music management tool combining:
+1. mood     - AI-based playlist mood/temperament analysis
+2. enrich   - Metadata filling from music databases
+3. organize - Playlist organization and classification
+4. curate   - Favourite Songs curation
+5. scan/status/dedupe/export/history - Library observability
 
 Usage:
-    python main.py                    # Interactive menu
-    python main.py --help             # Show help
-    python main.py temperament        # Run temperament analysis
-    python main.py enrich             # Run metadata enrichment
-    python main.py organize           # Run playlist organization
-    python main.py curate             # Preview Favourite Songs curation
+    curator                   # Interactive menu
+    curator --help            # Show help
+    curator mood              # Run mood analysis
+    curator enrich            # Run metadata enrichment
+    curator organize          # Run playlist organization
+    curator curate            # Preview Favourite Songs curation
+    curator scan              # Scan Apple Music library
+    curator status            # Show current state
+    curator jobs              # Manage background jobs
 """
 
 import sys
@@ -41,7 +46,7 @@ from src.cli_ui import (
     bold,
 )
 
-logger = setup_logger("affective_playlists")
+logger = setup_logger("curator")
 IS_MACOS = sys.platform == "darwin"
 
 # Import main modules
@@ -667,20 +672,20 @@ def show_job_history(args=None):
 
 def show_interactive_menu():
     """Show interactive menu to select and run a feature."""
-    print_header("🎵 affective_playlists", "Unified Music Library Organization")
+    print_header("🎵 curator", "Unified Music Library Organization")
 
     while True:
         try:
             features = [
-                "🎭 Temperament Analysis - AI emotion classification",
-                "📝 Metadata Enrichment - Fill missing metadata",
-                "📚 Playlist Organization - Genre-based sorting",
-                "🔍 Scan Library - Overview stats",
-                "📊 Status - Current jobs and run state",
-                "🗂 Deduplicate - Cross-playlist duplicate analysis",
-                "📦 Export - Export state to JSON",
-                "🛠 Music Tools - Playlist cleanup and genre maintenance",
-                "🕘 Job History - Review recent runs",
+                "🎭 Mood Analysis    - AI emotion classification of playlists",
+                "📝 Enrich Metadata  - Fill missing metadata from music databases",
+                "📚 Organize         - Genre-based playlist sorting",
+                "🔍 Scan Library     - Sync and show library stats",
+                "📊 Status           - Current jobs and run state",
+                "🗂  Deduplicate      - Cross-playlist duplicate analysis",
+                "📦 Export           - Export state to JSON",
+                "🛠  Music Tools      - Playlist cleanup and genre maintenance",
+                "🕘 Job History      - Review recent runs",
             ]
 
             choice = Menu.select("Select a feature to run", features)
@@ -705,7 +710,7 @@ def show_interactive_menu():
                 return show_job_history()
         except KeyboardInterrupt:
             print()
-            if Menu.confirm("Exit affective_playlists?"):
+            if Menu.confirm("Exit curator?"):
                 print(success("Goodbye!"))
                 return 0
 
@@ -713,8 +718,8 @@ def show_interactive_menu():
 def main(argv=None):
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        prog="affective_playlists",
-        description="Unified music analysis and organization tool",
+        prog="curator",
+        description="curator — Apple Music management: enrich, mood, organize, curate",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -742,7 +747,7 @@ def main(argv=None):
         )
         return feature_parser
 
-    add_feature_parser("temperament", "Run temperament analysis")
+    add_feature_parser("mood", "Analyse playlist mood via AI (was: temperament)")
     enrich_parser = add_feature_parser("enrich", "Run metadata enrichment")
     enrich_target = enrich_parser.add_mutually_exclusive_group()
     enrich_target.add_argument("--playlist", help="Apple Music playlist name to enrich")
@@ -858,7 +863,7 @@ def main(argv=None):
         logger.setLevel("DEBUG")
 
     # Run selected feature
-    if args.feature == "temperament":
+    if args.feature == "mood":
         return run_temperament_analysis()
     elif args.feature == "enrich":
         return run_metadata_enrichment(args)

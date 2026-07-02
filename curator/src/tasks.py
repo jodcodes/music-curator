@@ -17,7 +17,7 @@ logger = setup_logger(__name__)
 
 @app.task(
     bind=True,
-    name="affective_playlists.tasks.curation:apply_curation",
+    name="curator.tasks.curation:apply_curation",
     base=app.Task,
 )
 def apply_curation(
@@ -72,7 +72,7 @@ def apply_curation(
 
 @app.task(
     bind=True,
-    name="affective_playlists.tasks.enrichment:enrich_metadata",
+    name="curator.tasks.enrichment:enrich_metadata",
     base=app.Task,
 )
 def enrich_metadata(
@@ -158,7 +158,7 @@ def enrich_metadata(
 
 @app.task(
     bind=True,
-    name="affective_playlists.tasks.temperament:analyze_mood",
+    name="curator.tasks.temperament:analyze_mood",
     base=app.Task,
 )
 def analyze_mood(
@@ -247,7 +247,7 @@ def analyze_mood(
 
 @app.task(
     bind=True,
-    name="affective_playlists.tasks.organization:organize_playlists",
+    name="curator.tasks.organization:organize_playlists",
     base=app.Task,
 )
 def organize_playlists(
@@ -327,7 +327,7 @@ def organize_playlists(
         raise
 
 
-@app.task(name="affective_playlists.tasks.cleanup:cleanup_old_jobs")
+@app.task(name="curator.tasks.cleanup:cleanup_old_jobs")
 def cleanup_old_jobs(retention_days: int = 7) -> Dict[str, Any]:
     """
     Clean up old jobs from database.

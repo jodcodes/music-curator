@@ -164,10 +164,10 @@ class TestConfigEndpoint:
             assert field in data, f"Missing field: {field}"
 
     def test_config_app_name_is_correct(self, client):
-        """App name should be 'affective_playlists'."""
+        """App name should be 'curator'.."""
         response = client.get("/api/config")
         data = json.loads(response.data)
-        assert data["app_name"] == "affective_playlists"
+        assert data["app_name"] == "curator"
 
     def test_config_polling_interval_is_positive(self, client):
         """Polling interval should be positive milliseconds."""

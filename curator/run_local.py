@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Local deployment setup for affective_playlists with Celery + Redis.
+Local deployment setup for curator with Celery + Redis.
 
 This script sets up a complete development environment with:
 - Flask web server (port 5000)

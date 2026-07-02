@@ -57,7 +57,7 @@ class TestTaskQueueInitialization:
         from src.celery_app import app
 
         assert app.conf.task_default_queue == "default"
-        assert app.conf.task_routes["affective_playlists.tasks.curation:apply_curation"] == {
+        assert app.conf.task_routes["curator.tasks.curation:apply_curation"] == {
             "queue": "default"
         }
 
@@ -527,11 +527,11 @@ class TestCeleryConfiguration:
         assert True  # Placeholder
 
     def test_task_naming_convention(self):
-        """Task names follow convention: affective_playlists.tasks.{type}:{function}."""
+        """Task names follow convention: curator.tasks.{type}:{function}."""
         expected_names = [
-            "affective_playlists.tasks.enrichment:enrich_metadata",
-            "affective_playlists.tasks.temperament:analyze_mood",
-            "affective_playlists.tasks.organization:organize_playlists",
+            "curator.tasks.enrichment:enrich_metadata",
+            "curator.tasks.temperament:analyze_mood",
+            "curator.tasks.organization:organize_playlists",
         ]
 
         # Tasks should be registered with these names

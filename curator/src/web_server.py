@@ -1,5 +1,5 @@
 """
-Web Server for affective_playlists browser frontend.
+Web Server for curator browser frontend.
 
 Serves static files and provides REST API endpoints for playlist management,
 metadata enrichment, and temperament analysis.
@@ -292,7 +292,7 @@ def config():
 
     Returns:
       {
-        "app_name": "affective_playlists",
+        "app_name": "curator",
         "version": "1.0.0",
         "api_base": "/api",
         "polling_interval": 2000,
@@ -301,7 +301,7 @@ def config():
     """
     return jsonify(
         {
-            "app_name": "affective_playlists",
+            "app_name": "curator",
             "version": "1.0.0",
             "api_base": "/api",
             "polling_interval": 2000,  # ms
@@ -1154,7 +1154,7 @@ def get_fallback_html() -> str:
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>affective_playlists - Browser Frontend</title>
+        <title>curator - Browser Frontend</title>
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; }
@@ -1163,7 +1163,7 @@ def get_fallback_html() -> str:
     </head>
     <body>
         <div class="loading">
-            <h1>affective_playlists</h1>
+            <h1>curator</h1>
             <p>Loading front-end assets...</p>
         </div>
         <script>

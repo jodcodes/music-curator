@@ -1,5 +1,5 @@
 """
-affective_playlists Package
+curator Package
 
 Unified package for three music analysis and organization subprojects:
 - 4tempers: AI-based playlist temperament analysis

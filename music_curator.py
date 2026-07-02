@@ -10,9 +10,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
 TOOLS = {
-    "affective": (
-        "4tempers, Fav Songs curation, metadata, playlist organization, bundled music tools",
-        ROOT / "affective_playlists",
+    "curator": (
+        "Mood analysis, metadata enrichment, playlist organization, curation",
+        ROOT / "curator",
         ["python3", "main.py"],
     ),
     "apple2spfy": (
@@ -21,8 +21,8 @@ TOOLS = {
         ["python3", "sync_playlists.py"],
     ),
     "music-tools": (
-        "alias for affective_playlists tools",
-        ROOT / "affective_playlists",
+        "alias for curator tools",
+        ROOT / "curator",
         ["python3", "main.py", "tools"],
     ),
 }

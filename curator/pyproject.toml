@@ -3,7 +3,7 @@ requires = ["setuptools>=65.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "affective-playlists"
+name = "curator"
 version = "1.0.0"
 description = "Unified music analysis and organization tool for Apple Music"
 readme = "README.md"
@@ -48,14 +48,13 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/jodcodes/affective_playlists"
-Documentation = "https://github.com/jodcodes/affective_playlists/blob/main/README.md"
-Repository = "https://github.com/jodcodes/affective_playlists.git"
-Issues = "https://github.com/jodcodes/affective_playlists/issues"
+Homepage = "https://github.com/jodcodes/music-curator"
+Documentation = "https://github.com/jodcodes/music-curator/blob/main/curator/README.md"
+Repository = "https://github.com/jodcodes/music-curator.git"
+Issues = "https://github.com/jodcodes/music-curator/issues"
 
 [project.scripts]
-affective-playlists = "main:main"
-affective_playlists = "main:main"
+curator = "main:main"
 
 [tool.setuptools]
 packages = ["src"]
