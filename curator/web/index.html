@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#ffffff">
-    <title>affective_playlists</title>
+    <title>curator</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -12,7 +12,7 @@
     <nav class="navbar">
         <div class="nav-container">
             <div class="nav-brand">
-                <h1>♫ affective_playlists</h1>
+                <h1>♫ curator</h1>
             </div>
             <ul class="nav-menu" id="navMenu">
                 <li><a href="#" data-view="dashboard" class="nav-link active">Dashboard</a></li>
@@ -169,8 +169,8 @@
             <!-- Analyze View -->
             <section id="analyze" class="view">
                 <div class="card">
-                    <h3>Mood Analysis (Temperament)</h3>
-                    <p class="text-muted">Classify tracks by emotional temperament.</p>
+                    <h3>Mood Analysis</h3>
+                    <p class="text-muted">Classify playlists by emotional mood (Woe · Frolic · Dread · Malice).</p>
 
                     <div class="form-group">
                         <label for="analyzePlaylists">Select Playlists:</label>
@@ -186,7 +186,7 @@
                 <!-- Analysis Results -->
                 <div id="analysisResults" class="card" style="display: none;">
                     <h3>Analysis Results</h3>
-                    <div id="temperamentChart" class="temperament-grid"></div>
+                    <div id="moodChart" class="mood-grid"></div>
                     <button class="btn btn-secondary" id="exportAnalysisBtn">Export as CSV</button>
                 </div>
             </section>

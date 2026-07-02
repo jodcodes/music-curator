@@ -1,5 +1,5 @@
 /**
- * affective_playlists - Browser Frontend
+ * curator - Browser Frontend
  * Main application logic and state management
  */
 
@@ -15,7 +15,7 @@ const app = {
     },
     state: {
         currentView: 'dashboard',
-        theme: localStorage.getItem('affective_theme') || 'light',
+        theme: localStorage.getItem('curator_theme') || 'light',
         isOnline: true,
         playlists: [],
         enrichmentRunning: false,
@@ -111,7 +111,7 @@ const DOM = {
     startAnalysisBtn: () => document.getElementById('startAnalysisBtn'),
     analyzePlaylists: () => document.getElementById('analyzePlaylists'),
     analysisResults: () => document.getElementById('analysisResults'),
-    temperamentChart: () => document.getElementById('temperamentChart'),
+    moodChart: () => document.getElementById('moodChart'),
 
     // Organization
     reviewChangesBtn: () => document.getElementById('reviewChangesBtn'),
@@ -178,7 +178,7 @@ function showView(viewName) {
             link.classList.toggle('active', link.dataset.view === viewName);
         });
         app.state.currentView = viewName;
-        localStorage.setItem('affective_view', viewName);
+        localStorage.setItem('curator_view', viewName);
 
         // Update page title
         const titles = {
@@ -274,7 +274,7 @@ function initTheme() {
 
 function toggleTheme() {
     app.state.theme = app.state.theme === 'dark' ? 'light' : 'dark';
-    localStorage.setItem('affective_theme', app.state.theme);
+    localStorage.setItem('curator_theme', app.state.theme);
     document.documentElement.classList.toggle('dark');
     updateThemeToggleButton();
 }
@@ -540,7 +540,7 @@ async function loadAnalysisResults() {
 }
 
 function renderTemperamentChart(results) {
-    const chart = DOM.temperamentChart();
+    const chart = DOM.moodChart();
     chart.innerHTML = results.map(r => `
         <div class="temperament-item ${r.primary_temperament}">
             <div class="temperament-track-name">${r.track_name}</div>
@@ -1500,7 +1500,7 @@ async function init() {
         loadDashboard();
 
         // Restore last view
-        const lastView = localStorage.getItem('affective_view') || 'dashboard';
+        const lastView = localStorage.getItem('curator_view') || 'dashboard';
         showView(lastView);
         if (lastView === 'curation') {
             loadCurationSnapshot();
