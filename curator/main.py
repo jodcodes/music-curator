@@ -590,6 +590,215 @@ def run_export(args=None):
     return 0
 
 
+def run_import(args=None):
+    """Import library state from a JSON file produced by 'curator export'."""
+    import json
+
+    in_path = getattr(args, "input", None) if args else None
+    if not in_path:
+        print(error("--input <file> is required"))
+        return 1
+
+    print_header("📥 Import", f"Importing library state from {in_path}")
+    try:
+        with open(in_path) as f:
+            payload = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        print(error(f"Could not read {in_path}: {e}"))
+        return 1
+
+    store = LibraryStateStore()
+    imported_runs = 0
+    skipped_runs = 0
+    for run_dict in payload.get("runs", []):
+        try:
+            existing = store.list_runs(limit=1, run_type=run_dict.get("run_type"))
+            if any(r.id == run_dict.get("id") for r in existing):
+                skipped_runs += 1
+                continue
+            run = store.create_run(
+                run_type=run_dict.get("run_type", "import"),
+                target=run_dict.get("target", ""),
+                payload=run_dict.get("payload", {}),
+            )
+            store.finish_run(
+                run.id,
+                status=run_dict.get("status", "completed"),
+                processed_items=run_dict.get("processed_items", 0),
+                skipped_items=run_dict.get("skipped_items", 0),
+                details=run_dict.get("details", {}),
+            )
+            imported_runs += 1
+        except Exception:
+            skipped_runs += 1
+
+    print(success(f"Imported {imported_runs} runs ({skipped_runs} skipped)"))
+    print_footer()
+    return 0
+
+
+def run_replay(args=None):
+    """Re-execute a past LibraryRun by its ID."""
+    run_id = getattr(args, "run_id", None) if args else None
+    if not run_id:
+        print(error("--run-id <id> is required"))
+        return 1
+
+    store = LibraryStateStore()
+    runs = store.list_runs(limit=200)
+    target_run = next((r for r in runs if str(r.id) == str(run_id)), None)
+    if not target_run:
+        print(error(f"Run {run_id} not found"))
+        return 1
+
+    print_header("🔁 Replay", f"Re-running {target_run.run_type} run {run_id}")
+    print(info(f"Original: {target_run.run_type} | target={target_run.target} | {target_run.created_at}"))
+
+    from types import SimpleNamespace
+    replay_args = SimpleNamespace()
+
+    run_type = target_run.run_type
+    if run_type == "scan":
+        return run_scan(replay_args)
+    elif run_type == "enrich":
+        replay_args.library = True
+        replay_args.playlist = None
+        replay_args.folder = None
+        replay_args.force = False
+        replay_args.verbose = False
+        return run_metadata_enrichment(replay_args)
+    elif run_type == "dedupe":
+        replay_args.apply = False
+        replay_args.scope = target_run.target or "dedupe"
+        return run_dedupe(replay_args)
+    else:
+        print(error(f"Replay not supported for run type '{run_type}'. Supported: scan, enrich, dedupe"))
+        return 1
+
+
+def run_jobs_command(args=None):
+    """Manage background jobs: list, status, cancel."""
+    action = getattr(args, "jobs_action", None) if args else None
+    job_store = get_job_store()
+
+    if action == "list" or action is None:
+        limit = getattr(args, "limit", 20) if args else 20
+        status_filter = getattr(args, "status", None) if args else None
+        print_header("🗂 Jobs", "Background job queue")
+        total, jobs = job_store.list_jobs(limit=limit, status=status_filter)
+        if not jobs:
+            print(info("No jobs found"))
+        else:
+            print(info(f"Showing {len(jobs)} of {total} jobs"))
+            for job in jobs:
+                created = job.created_at.isoformat() if job.created_at else "unknown"
+                progress = f"{job.progress}%" if job.progress is not None else "n/a"
+                print(f"  {job.id}  {job.type:<20} {job.status:<12} {progress:>5}  {created}")
+        print_footer()
+        return 0
+
+    elif action == "status":
+        job_id = getattr(args, "job_id", None) if args else None
+        if not job_id:
+            print(error("job_id required"))
+            return 1
+        job = job_store.get_job(job_id)
+        if not job:
+            print(error(f"Job {job_id} not found"))
+            return 1
+        print_header("🗂 Job Status", job_id)
+        print(info(f"Type:     {job.type}"))
+        print(info(f"Status:   {job.status}"))
+        print(info(f"Progress: {job.progress}%") if job.progress is not None else info("Progress: n/a"))
+        print(info(f"Created:  {job.created_at}"))
+        print(info(f"Updated:  {job.updated_at}"))
+        if job.error:
+            print(error(f"Error: {job.error}"))
+        print_footer()
+        return 0
+
+    elif action == "cancel":
+        job_id = getattr(args, "job_id", None) if args else None
+        if not job_id:
+            print(error("job_id required"))
+            return 1
+        try:
+            job_store.update_job(job_id, status="cancelled")
+            print(success(f"Job {job_id} cancelled"))
+            return 0
+        except Exception as e:
+            print(error(f"Could not cancel job {job_id}: {e}"))
+            return 1
+
+    else:
+        print(error(f"Unknown jobs action: {action}"))
+        return 1
+
+
+def run_mood_show(args=None):
+    """Show current mood assignments from Music.app folder structure."""
+    if not require_macos("mood show"):
+        return 1
+    print_header("🎭 Mood Map", "Current playlist mood assignments")
+    try:
+        am = AppleMusicInterface()
+        playlists = am.get_playlists()
+        # Group playlists whose parent folder starts with "4 Tempers"
+        buckets: dict[str, list[str]] = {"Woe": [], "Frolic": [], "Dread": [], "Malice": [], "Unclassified": []}
+        for pl in playlists:
+            parent = pl.get("parent_folder", "") or ""
+            name = pl.get("name", "")
+            matched = False
+            for bucket in ("Woe", "Frolic", "Dread", "Malice"):
+                if bucket.lower() in parent.lower():
+                    buckets[bucket].append(name)
+                    matched = True
+                    break
+            if not matched and pl.get("is_user_playlist", True):
+                buckets["Unclassified"].append(name)
+
+        for bucket, names in buckets.items():
+            if names:
+                print(bold(f"\n{bucket} ({len(names)}):"))
+                for n in sorted(names):
+                    print(f"  • {n}")
+        print_footer()
+        return 0
+    except Exception as e:
+        print(error(f"mood show failed: {e}"))
+        return 1
+
+
+def run_mood_suggest(args=None):
+    """Suggest playlists matching a mood bucket."""
+    mood = getattr(args, "mood", None) if args else None
+    if not mood:
+        print(error("--mood <woe|frolic|dread|malice> is required"))
+        return 1
+    if not require_macos("mood suggest"):
+        return 1
+    print_header("🎭 Mood Suggest", f"Playlists matching mood: {mood.title()}")
+    try:
+        am = AppleMusicInterface()
+        playlists = am.get_playlists()
+        matches = [
+            pl.get("name", "")
+            for pl in playlists
+            if mood.lower() in (pl.get("parent_folder", "") or "").lower()
+        ]
+        if not matches:
+            print(info(f"No playlists classified as '{mood.title()}' yet. Run: curator mood analyze --apply"))
+        else:
+            print(info(f"Found {len(matches)} playlists:"))
+            for name in sorted(matches):
+                print(f"  • {name}")
+        print_footer()
+        return 0
+    except Exception as e:
+        print(error(f"mood suggest failed: {e}"))
+        return 1
+
+
 def run_music_tools(args=None):
     """Run the bundled maintenance scripts."""
     tool_name = getattr(args, "tool", None) if args else None
@@ -681,12 +890,14 @@ def show_interactive_menu():
     while True:
         try:
             features = [
-                "🎭 Mood Analysis    - AI emotion classification of playlists",
+                "🎭 Mood Analyze     - AI emotion classification of playlists",
+                "🗺  Mood Show        - Current mood folder assignments",
                 "📝 Enrich Metadata  - Fill missing metadata from music databases",
                 "📚 Organize         - Genre-based playlist sorting",
                 "🔍 Scan Library     - Sync and show library stats",
                 "📊 Status           - Current jobs and run state",
                 "🗂  Deduplicate      - Cross-playlist duplicate analysis",
+                "🗃  Jobs             - Background job queue",
                 "📦 Export           - Export state to JSON",
                 "🛠  Music Tools      - Playlist cleanup and genre maintenance",
                 "🕘 Job History      - Review recent runs",
@@ -697,20 +908,24 @@ def show_interactive_menu():
             if choice == 0:
                 return run_mood_analysis()
             elif choice == 1:
-                return run_metadata_enrichment()
+                return run_mood_show()
             elif choice == 2:
-                return run_playlist_organization()
+                return run_metadata_enrichment()
             elif choice == 3:
-                return run_scan()
+                return run_playlist_organization()
             elif choice == 4:
-                return show_status()
+                return run_scan()
             elif choice == 5:
-                return run_dedupe()
+                return show_status()
             elif choice == 6:
-                return run_export()
+                return run_dedupe()
             elif choice == 7:
-                return run_music_tools()
+                return run_jobs_command()
             elif choice == 8:
+                return run_export()
+            elif choice == 9:
+                return run_music_tools()
+            elif choice == 10:
                 return show_job_history()
         except KeyboardInterrupt:
             print()
@@ -751,11 +966,21 @@ def main(argv=None):
         )
         return feature_parser
 
-    mood_parser = add_feature_parser("mood", "Analyse playlist mood via AI")
-    mood_scope = mood_parser.add_mutually_exclusive_group()
-    mood_scope.add_argument("--library", action="store_true", help="Analyse mood for all playlists")
-    mood_scope.add_argument("--playlist", help="Apple Music playlist name to analyse")
-    mood_parser.add_argument("--apply", action="store_true", help="Move playlists to mood folders")
+    # mood sub-subcommands: analyze, show, suggest
+    mood_parser = add_feature_parser("mood", "Mood analysis: analyze, show, suggest")
+    mood_sub = mood_parser.add_subparsers(dest="mood_action", metavar="action")
+    analyze_p = mood_sub.add_parser("analyze", help="AI mood classification (default)")
+    analyze_scope = analyze_p.add_mutually_exclusive_group()
+    analyze_scope.add_argument("--library", action="store_true", help="Analyse all playlists")
+    analyze_scope.add_argument("--playlist", help="Specific playlist to analyse")
+    analyze_p.add_argument("--apply", action="store_true", help="Move playlists to mood folders")
+    show_p = mood_sub.add_parser("show", help="Show current mood folder assignments")
+    show_p.add_argument("--playlist", help="Filter to a specific playlist")
+    suggest_p = mood_sub.add_parser("suggest", help="List playlists for a mood bucket")
+    suggest_p.add_argument(
+        "--mood", choices=["woe", "frolic", "dread", "malice"], required=True,
+        help="Mood bucket to filter by"
+    )
 
     enrich_parser = add_feature_parser("enrich", "Fill metadata from music databases")
     enrich_scope = enrich_parser.add_mutually_exclusive_group()
@@ -811,6 +1036,27 @@ def main(argv=None):
         choices=["queued", "running", "completed", "failed", "cancelled", "timeout"],
         help="Filter jobs by status",
     )
+
+    # jobs sub-subcommands: list, status, cancel
+    jobs_parser = add_feature_parser("jobs", "Manage background jobs")
+    jobs_sub = jobs_parser.add_subparsers(dest="jobs_action", metavar="action")
+    jobs_list_p = jobs_sub.add_parser("list", help="List recent jobs (default)")
+    jobs_list_p.add_argument("--limit", type=int, default=20, help="Max jobs to show")
+    jobs_list_p.add_argument(
+        "--status",
+        choices=["queued", "running", "completed", "failed", "cancelled", "timeout"],
+        help="Filter by status",
+    )
+    jobs_status_p = jobs_sub.add_parser("status", help="Show detail for a single job")
+    jobs_status_p.add_argument("job_id", help="Job ID")
+    jobs_cancel_p = jobs_sub.add_parser("cancel", help="Cancel a queued or running job")
+    jobs_cancel_p.add_argument("job_id", help="Job ID")
+
+    import_parser = add_feature_parser("import", "Import library state from a JSON export")
+    import_parser.add_argument("--input", required=True, help="Path to JSON file from 'curator export'")
+
+    replay_parser = add_feature_parser("replay", "Re-run a past library run by ID")
+    replay_parser.add_argument("--run-id", required=True, dest="run_id", help="LibraryRun ID to replay")
 
     curate_parser = add_feature_parser("curate", "Preview/apply Favourite Songs curation")
     curate_parser.add_argument(
@@ -868,7 +1114,13 @@ def main(argv=None):
 
     # Run selected feature
     if args.feature == "mood":
-        return run_mood_analysis()
+        action = getattr(args, "mood_action", None)
+        if action == "show":
+            return run_mood_show(args)
+        elif action == "suggest":
+            return run_mood_suggest(args)
+        else:  # "analyze" or no sub-action
+            return run_mood_analysis(args)
     elif args.feature == "enrich":
         return run_metadata_enrichment(args)
     elif args.feature == "organize":
@@ -881,6 +1133,12 @@ def main(argv=None):
         return run_dedupe(args)
     elif args.feature == "export":
         return run_export(args)
+    elif args.feature == "import":
+        return run_import(args)
+    elif args.feature == "replay":
+        return run_replay(args)
+    elif args.feature == "jobs":
+        return run_jobs_command(args)
     elif args.feature == "tools":
         return run_music_tools(args)
     elif args.feature == "history":
