@@ -1,6 +1,171 @@
-# affective_playlists
+# curator
 
-Core Apple Music curation app for the `music-curator` workspace. It now also owns the bundled maintenance scripts that used to live in `music_tools`.
+> Apple Music management CLI — enrich metadata, analyse mood, organise playlists, deduplicate tracks.
+
+Part of the [`music-curator`](https://github.com/jodcodes/music-curator) monorepo. Requires macOS + Music.app for live operations; most tests run without it.
+
+## Features
+
+| Command | What it does | Needs Music.app |
+|---|---|---|
+| `curator scan` | Sync library state into local DB | ✓ |
+| `curator enrich` | Fill metadata from MusicBrainz, AcousticBrainz, Discogs, Last.fm | ✓ |
+| `curator mood` | AI mood classification of playlists (OpenAI / Claude) | ✓ |
+| `curator organize` | Move playlists into genre folders | ✓ |
+| `curator dedupe` | Find and remove duplicate tracks across playlists | ✓ |
+| `curator curate` | Favourite Songs curation pipeline | ✓ |
+| `curator status` | Show last runs, job queue, dedupe stats | — |
+| `curator history` | Browse run log | — |
+| `curator export` | Export state to JSON | — |
+| `curator tools` | Bundled JXA/AppleScript maintenance scripts | ✓ |
+
+## Requirements
+
+- Python 3.10+
+- macOS (for any command that touches Music.app)
+- `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` for `curator mood`
+
+Optional (for richer metadata):
+- `LASTFM_API_KEY`
+- `DISCOGS_TOKEN`
+- `SPOTIFY_CLIENT_ID` + `SPOTIFY_CLIENT_SECRET`
+
+## Installation
+
+```bash
+cd curator
+python -m pip install -e ".[dev]"
+cp .env.example .env   # then fill in your keys
+```
+
+## Usage
+
+```bash
+# Interactive menu (no args)
+curator
+
+# Scan your library
+curator scan
+
+# Enrich metadata for a playlist
+curator enrich --playlist "80s Mix"
+
+# Enrich entire library
+curator enrich --library
+
+# Analyse mood for a playlist (requires API key)
+curator mood --playlist "Chill"
+
+# Organise all playlists into genre folders (dry-run by default)
+curator organize
+curator organize --apply
+
+# Find duplicates across playlists
+curator dedupe
+
+# Run Favourite Songs curation (preview)
+curator curate --scope fav_songs
+
+# Check current state
+curator status
+curator history
+
+# Export library state to JSON
+curator export --output my_library.json
+```
+
+## How it works
+
+```
+Apple Music ──► scan ──► SQLite (jobs.db)
+                          │
+                ┌─────────┼──────────┐
+                ▼         ▼          ▼
+             enrich     mood      organize
+          (music DBs)  (LLM AI)  (classifier)
+                │         │          │
+                └────►  dedupe ◄─────┘
+                          │
+                       export / history / status
+```
+
+All parallel work goes through a shared bounded thread pool (`AFFECTIVE_MAX_WORKERS`, default 8). Every run is recorded in SQLite with a full audit trail.
+
+## Mood classification
+
+`curator mood` sends track metadata to an LLM (OpenAI or Claude) and classifies each playlist into one of four emotional buckets:
+
+| Bucket | Character |
+|---|---|
+| **Woe** | Melancholy, introspection, sadness |
+| **Frolic** | Joy, optimism, celebration |
+| **Dread** | Tension, anxiety, dramatic |
+| **Malice** | Rage, aggression, intensity |
+
+Playlists are then moved into `4 Tempers/<Genre> <Mood>` folders.
+
+## Metadata sources
+
+Priority order for `curator enrich`:
+
+1. MusicBrainz — primary (BPM, year, MBID)
+2. AcousticBrainz — audio analysis (requires MBID)
+3. Discogs — genre, release info
+4. Wikidata — structured artist/track relationships
+5. Last.fm — user-generated tags (lowest priority)
+
+## Persistent state
+
+All state lives in `jobs.db` (SQLite, local). Tables:
+
+| Table | Contains |
+|---|---|
+| `jobs` | Background job queue |
+| `library_runs` | Scan/enrich/dedupe run history |
+| `track_dedup_history` | Dedup audit trail per track |
+| `state_cache_entries` | Metadata query cache |
+
+Switch to PostgreSQL by setting `DATABASE_URL=postgresql://...` — the repository interface is the same.
+
+## Automation (LaunchAgent)
+
+A macOS LaunchAgent (`com.joeldebeljak.music-tools`) fires automatically on SSD mount + AC power and runs `curator curate --scope fav_songs`. See [`music_tools/`](../music_tools/) for the agent and its companion JXA scripts.
+
+## Development
+
+```bash
+# Run all tests
+python -m pytest
+
+# Run a targeted suite
+python -m pytest tests/test_metadata_fill.py -q
+
+# Environment variable reference
+AFFECTIVE_MAX_WORKERS=8   # parallel worker cap
+DATABASE_URL=sqlite:///jobs.db
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+LASTFM_API_KEY=
+DISCOGS_TOKEN=
+SPOTIFY_CLIENT_ID=
+SPOTIFY_CLIENT_SECRET=
+```
+
+Tests do not require Music.app — all Apple Music calls are mocked. 582 tests, ~60s.
+
+## Docs
+
+```
+curator/docs/
+├── INSTALLATION.md          full dependency and setup guide
+├── OVERVIEW.md              architecture overview
+├── domain-guides/
+│   ├── metadata/            enrichment pipeline details
+│   ├── playlists/           playlist management concepts
+│   └── temperament/         mood classification internals
+└── archive/                 legacy specs and reports
+```
+
 
 **Unified suite for music analysis and organization**
 

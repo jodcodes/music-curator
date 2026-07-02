@@ -1,6 +1,6 @@
 # Documentation
 
-This folder contains all documentation for the affective_playlists project, organized around the spec-driven brownfield workflow.
+This folder contains all documentation for the curator project, organized around the spec-driven brownfield workflow.
 
 ## Folder Structure
 

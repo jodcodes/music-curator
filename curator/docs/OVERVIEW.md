@@ -1,8 +1,8 @@
-# affective_playlists - Project Documentation
+# curator — Project Overview
 
 ## Quick Summary
 
-**affective_playlists** is a unified Python CLI application for advanced music library management and analysis. It combines three powerful tools into a single, cohesive platform for Apple Music users.
+**curator** is a unified Python CLI application for advanced music library management and analysis. It combines three powerful tools into a single, cohesive platform for Apple Music users.
 
 ## What This Project Does
 
@@ -59,7 +59,7 @@ Organizes playlists by genre classification:
 ## Project Structure
 
 ```
-affective_playlists/
+curator/
 ├── main.py                      # Unified CLI entry point
 ├── requirements.txt             # Python dependencies
 ├── .env.example                 # Environment template

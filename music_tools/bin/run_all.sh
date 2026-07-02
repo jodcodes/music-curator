@@ -48,8 +48,8 @@ fi
 export MUSIC_TOOLS_SSD_MOUNT="$SSD_MOUNT"
 export MUSIC_TOOLS_LIBRARY_PATH="$MUSIC_LIBRARY_PATH"
 
-AFFECTIVE_PLAYLISTS_DIR="$(cd "$REPO_DIR/../affective_playlists" && pwd)"
-AFFECTIVE_PLAYLISTS_CMD=(/usr/bin/env python3 "$AFFECTIVE_PLAYLISTS_DIR/main.py" curate --scope fav_songs)
+CURATOR_DIR="$(cd "$REPO_DIR/../curator" && pwd)"
+CURATOR_CMD=(/usr/bin/env python3 "$CURATOR_DIR/main.py" curate --scope fav_songs)
 
 if [ -f "$STAMP_FILE" ]; then
     LAST=$(cat "$STAMP_FILE" 2>/dev/null || echo 0)
@@ -65,13 +65,13 @@ fi
 log "=== Start ==="
 OVERALL_RC=0
 
-if [ -d "$AFFECTIVE_PLAYLISTS_DIR" ]; then
-    log "→ affective_playlists curate --scope fav_songs"
-    if ! (cd "$AFFECTIVE_PLAYLISTS_DIR" && "${AFFECTIVE_PLAYLISTS_CMD[@]}") >> "$LOG_DIR/curate_fav_songs.log" 2>> "$LOG_DIR/curate_fav_songs.err.log"; then
+if [ -d "$CURATOR_DIR" ]; then
+    log "→ curator curate --scope fav_songs"
+    if ! (cd "$CURATOR_DIR" && "${CURATOR_CMD[@]}") >> "$LOG_DIR/curate_fav_songs.log" 2>> "$LOG_DIR/curate_fav_songs.err.log"; then
         log "  curation dry-run failed; keeping existing scheduler cadence"
     fi
 else
-    log "missing: $AFFECTIVE_PLAYLISTS_DIR"
+    log "missing: $CURATOR_DIR"
 fi
 
 run_script() {

@@ -1,18 +1,18 @@
-# Installation Guide - affective_playlists
+# Installation Guide - curator
 
 ## Quick Installation
 
 ### Option 1: Editable Install (Recommended for Development)
 
 ```bash
-cd /path/to/affective_playlists
+cd /path/to/curator
 pip install -e .
 ```
 
 Then use from anywhere:
 ```bash
-affective-playlists
-affective_playlists
+curator
+curator
 ```
 
 ### Option 2: Development with Virtual Environment
@@ -25,7 +25,7 @@ source activate.sh
 pip install -e .
 
 # Now you can use the command from anywhere (while venv is active)
-affective-playlists
+curator
 ```
 
 ### Option 3: Manual Installation
@@ -36,45 +36,45 @@ source activate.sh
 pip install -r requirements.txt
 
 # Create an alias (add to ~/.zshrc or ~/.bash_profile)
-alias affective-playlists="python /path/to/affective_playlists/main.py"
+alias curator="python /path/to/curator/main.py"
 ```
 
 ## What Gets Installed
 
 The installation creates command-line entry points:
-- `affective-playlists` - Primary command
-- `affective_playlists` - Alternative (underscore version)
+- `curator` - Primary command
+- `curator` - Alternative (underscore version)
 
-Both execute `/path/to/affective_playlists/main.py`
+Both execute `/path/to/curator/main.py`
 
 ## Usage After Installation
 
 ### Interactive Menu
 ```bash
-affective-playlists
+curator
 ```
 
 ### Run Specific Feature
 ```bash
-affective-playlists temperament   # AI emotion analysis
-affective-playlists enrich         # Metadata enrichment
-affective-playlists organize       # Genre-based organization
+curator temperament   # AI emotion analysis
+curator enrich         # Metadata enrichment
+curator organize       # Genre-based organization
 ```
 
 ### Verbose Mode
 ```bash
-affective-playlists -v
-affective-playlists temperament -v
+curator -v
+curator temperament -v
 ```
 
 ### Show Version
 ```bash
-affective-playlists --version
+curator --version
 ```
 
 ### Show Help
 ```bash
-affective-playlists --help
+curator --help
 ```
 
 ## System Requirements
@@ -89,13 +89,13 @@ After installation, verify the command works:
 
 ```bash
 # Check version
-affective-playlists --version
+curator --version
 
 # Check help
-affective-playlists --help
+curator --help
 
 # Try interactive mode
-affective-playlists
+curator
 ```
 
 ## Uninstalling
@@ -103,7 +103,7 @@ affective-playlists
 To uninstall and remove the command:
 
 ```bash
-pip uninstall affective-playlists
+pip uninstall curator
 ```
 
 Or restore the alias:
@@ -115,16 +115,16 @@ source ~/.zshrc  # or ~/.bash_profile
 ## Troubleshooting
 
 ### Command not found
-If `affective-playlists` is not found after installation:
+If `curator` is not found after installation:
 
 1. **Check installation**:
    ```bash
-   pip show affective-playlists
+   pip show curator
    ```
 
 2. **Reinstall**:
    ```bash
-   pip uninstall affective-playlists
+   pip uninstall curator
    pip install -e .
    ```
 

@@ -1,59 +1,56 @@
-# Music Curator
+# music-curator
 
-Umbrella workspace for music automation tools. The product surface is `affective_playlists`; `apple2spfy` stays separate.
+Monorepo for Apple Music automation tools.
 
-Requires macOS for commands that talk to Music.app. Some read-only tests run on Linux in CI.
+```
+music-curator/
+├── curator/          ← main product: enrich · mood · organize · curate
+├── apple2spfy/       ← sync Apple Music playlists to Spotify
+├── pitch2play/       ← pitch detection and playlist routing
+├── music_tools/      ← LaunchAgent + JXA/AppleScript automation scripts
+└── music_curator.py  ← top-level launcher
+```
 
-`affective_playlists` now also owns the bundled maintenance scripts from `music_tools`, so one CLI covers curation, dedupe, cleanup, and enrichment.
+## Products
 
-## Tools
+| Tool | What it does | Requires |
+|---|---|---|
+| [`curator`](curator/) | Metadata enrichment, AI mood analysis, playlist org, dedup, curation | macOS + Music.app |
+| [`apple2spfy`](apple2spfy/) | Export/sync Apple Music playlists → Spotify | macOS |
+| [`pitch2play`](pitch2play/) | Pitch detection → playlist routing | macOS |
 
-- [`affective_playlists/`](affective_playlists/) — Apple Music playlist curation plus bundled maintenance scripts.
-- [`apple2spfy/`](apple2spfy/) — Apple Music to Spotify playlist sync/export helpers.
-- [`music_tools/`](music_tools/) — legacy script home; now wired into `affective_playlists tools`.
+## Quick start
+
+```bash
+# list available tools
+python3 music_curator.py --list
+
+# launch curator interactive menu
+python3 music_curator.py curator
+
+# or go directly into curator
+cd curator
+python -m pip install -e ".[dev]"
+curator
+```
+
+## Automation
+
+`music_tools/` contains a macOS LaunchAgent (`com.joeldebeljak.music-tools`) that fires on SSD mount + AC power and runs:
+
+1. `curator curate --scope fav_songs` — Favourite Songs curation
+2. `sort_favourites_by_genre.js` — sort favourites by genre
+3. `route_albums_to_playlists.applescript` — route albums into playlists
+4. `find_playlist_duplicates.js` — flag cross-playlist duplicates
+
+Logs land in `logs/`. The agent enforces a 12-hour minimum interval between runs.
 
 ## Safety
 
-Most live operations touch Music.app playlists or external APIs. Prefer preview/dry-run commands first. Keep backups of important playlists before applying bulk changes.
+All write operations default to **dry-run / preview**. Pass `--apply` explicitly to commit changes. Back up important playlists before bulk operations.
 
-## Setup
+## Docs
 
-Each tool has its own setup notes and dependencies. Start in the tool folder you want to use:
-
-```bash
-python3 music_curator.py --list
-python3 music_curator.py
-python3 music_curator.py affective --help
-python3 music_curator.py apple2spfy --help
-python3 music_curator.py music-tools --list
-
-cd affective_playlists
-python -m pytest tests/test_curation_models.py tests/test_curation_service.py tests/test_apple_music_structure.py -q
-```
-
-Track curation targets are intentionally flat:
-
-```text
-Fav Songs / <Genre>
-4 Tempers / <Genre> <Temper>
-```
-
-Put source playlists for 4 Tempers in `affective_playlists/data/config/curation_sources.json`, then preview:
-
-```bash
-cd affective_playlists
-python main.py curate --scope playlist_tempers
-```
-
-Install dependencies inside each tool folder when needed:
-
-```bash
-cd affective_playlists && python -m pip install -e ".[dev]"
-cd apple2spfy && python -m pip install -r requirements.txt
-```
-
-Copy `.env.example` to `.env` only for local use. Never commit real tokens, exports, logs, caches, or Music snapshots.
-
-## Repo Plan
-
-See [`docs/music-curator-abstraction-plan.md`](docs/music-curator-abstraction-plan.md). Short version: keep `apple2spfy` separate, but treat `affective_playlists` + `music_tools` as one product surface.
+- [`curator/README.md`](curator/README.md) — full curator feature reference
+- [`curator/QUICKSTART.md`](curator/QUICKSTART.md) — 5-minute setup
+- [`docs/music-curator-abstraction-plan.md`](docs/music-curator-abstraction-plan.md) — architecture decisions

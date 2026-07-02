@@ -1,4 +1,118 @@
-# affective_playlists - Quick Start Guide
+# curator — Quick Start
+
+## 1. Install
+
+```bash
+cd curator
+python -m pip install -e ".[dev]"
+cp .env.example .env
+```
+
+## 2. Add API keys
+
+Open `.env` and add at minimum:
+
+```bash
+OPENAI_API_KEY=sk-...          # required for: curator mood
+```
+
+Optional (richer metadata):
+
+```bash
+LASTFM_API_KEY=
+DISCOGS_TOKEN=
+SPOTIFY_CLIENT_ID=
+SPOTIFY_CLIENT_SECRET=
+```
+
+## 3. Run
+
+```bash
+curator          # interactive menu
+curator --help   # all commands
+```
+
+---
+
+## Common workflows
+
+### Enrich metadata for a playlist
+
+```bash
+curator enrich --playlist "80s Mix"
+curator enrich --library          # whole library
+curator enrich --folder ~/Music   # local folder
+```
+
+Pulls BPM, year, genre, cover art from MusicBrainz → AcousticBrainz → Discogs → Last.fm in priority order.
+
+### Analyse mood (AI)
+
+```bash
+curator mood --playlist "Chill"
+curator mood --library --apply    # classify + move all playlists to mood folders
+```
+
+Classifies each playlist as **Woe / Frolic / Dread / Malice** using OpenAI or Claude.
+
+### Organise playlists by genre
+
+```bash
+curator organize           # preview
+curator organize --apply   # commit
+```
+
+### Find duplicates
+
+```bash
+curator dedupe             # dry-run report
+curator dedupe --apply     # remove
+```
+
+### Library state
+
+```bash
+curator scan               # sync from Music.app
+curator status             # last runs, job queue, dedup stats
+curator history            # full run log
+curator export --output lib.json
+```
+
+### Favourite Songs curation
+
+```bash
+curator curate --scope fav_songs          # preview
+curator curate --scope fav_songs --apply  # apply
+```
+
+---
+
+## File locations
+
+| Path | What |
+|---|---|
+| `.env` | API keys (never commit) |
+| `jobs.db` | SQLite state (runs, jobs, cache, dedup history) |
+| `data/config/` | Genre map, playlist folders, curation sources |
+| `data/config/whitelist.json` | Restrict enrichment to listed playlists |
+| `logs/` | Per-feature log files |
+| `mood_analyzer.log` | Mood analysis run log |
+
+## Troubleshooting
+
+**`curator: command not found`** — install first: `pip install -e .`
+
+**`OPENAI_API_KEY not found`** — `curator mood` requires it; add to `.env`
+
+**`Music.app not accessible`** — System Settings → Privacy & Security → Automation → grant Terminal access to Music
+
+**Tests**
+
+```bash
+python -m pytest          # full suite (~60s, 582 tests)
+python -m pytest tests/test_metadata_fill.py -q   # targeted
+```
+
 
 ## One-Command Installation
 
