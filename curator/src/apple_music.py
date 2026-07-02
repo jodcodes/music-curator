@@ -884,3 +884,15 @@ end tell
             logger.warning("No valid playlist name/ID pairs extracted from output")
 
         return playlists
+
+    # ------------------------------------------------------------------
+    # Convenience aliases used by CLI commands (scan, dedupe, mood show)
+    # ------------------------------------------------------------------
+
+    def get_playlists(self) -> List[Dict]:
+        """Return user playlists as list of dicts with at least 'name' key."""
+        return self.get_user_playlists_with_counts()
+
+    def get_all_tracks(self) -> List[Dict]:
+        """Return all tracks from the Apple Music library."""
+        return self.get_library_tracks()
