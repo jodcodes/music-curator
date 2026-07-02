@@ -649,12 +649,12 @@ class TestMoodShowSuggest:
         monkeypatch.setattr(main, "IS_MACOS", True)
 
         class FakeAM:
-            def get_playlists(self):
-                return [
-                    {"name": "Sad Mix", "parent_folder": "4 Tempers/Jazz Woe", "is_user_playlist": True},
-                    {"name": "Party", "parent_folder": "4 Tempers/Pop Frolic", "is_user_playlist": True},
-                    {"name": "No Mood", "parent_folder": "", "is_user_playlist": True},
-                ]
+            def get_playlist_folder_structure(self):
+                return {
+                    "4 Tempers/Jazz Woe": ["Sad Mix"],
+                    "4 Tempers/Pop Frolic": ["Party"],
+                    "Other": ["No Mood"],
+                }
 
         monkeypatch.setattr(main, "AppleMusicInterface", lambda: FakeAM())
         from types import SimpleNamespace
@@ -677,11 +677,11 @@ class TestMoodShowSuggest:
         monkeypatch.setattr(main, "IS_MACOS", True)
 
         class FakeAM:
-            def get_playlists(self):
-                return [
-                    {"name": "Sad Mix", "parent_folder": "4 Tempers/Jazz Woe"},
-                    {"name": "Party", "parent_folder": "4 Tempers/Pop Frolic"},
-                ]
+            def get_playlist_folder_structure(self):
+                return {
+                    "4 Tempers/Jazz Woe": ["Sad Mix"],
+                    "4 Tempers/Pop Frolic": ["Party"],
+                }
 
         monkeypatch.setattr(main, "AppleMusicInterface", lambda: FakeAM())
         from types import SimpleNamespace

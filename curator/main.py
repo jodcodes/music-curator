@@ -104,10 +104,13 @@ def require_macos(feature_name: str) -> bool:
 
 
 def run_mood_analysis(args=None):
-    """Run 4tempers - AI temperament analysis."""
-    print_header("🎭 Temperament Analysis", "AI-based Playlist Emotion Classification")
+    """Run AI mood/temperament analysis on playlists."""
+    target_playlist = getattr(args, "playlist", None) if args else None
+    apply = getattr(args, "apply", False) if args else False
+    header = f"AI Mood Classification — {target_playlist or 'all playlists'}"
+    print_header("🎭 Mood Analysis", header)
 
-    if not require_macos("Temperament analysis"):
+    if not require_macos("Mood analysis"):
         return 1
 
     if not validate_openai_api_key():
@@ -115,13 +118,11 @@ def run_mood_analysis(args=None):
 
     try:
         print(info("Initializing clients..."))
-        logger.debug("Initializing temperament analysis clients")
+        logger.debug("Initializing mood analysis clients")
 
-        # Initialize clients
         music_client = MusicAppClient()
         llm_client = OpenAILLMClient()
 
-        # Authenticate
         print(info("Connecting to Music.app..."))
         if not music_client.authenticate():
             logger.error("Failed to authenticate with Music.app")
@@ -129,11 +130,12 @@ def run_mood_analysis(args=None):
             return 1
 
         print(success("Connected to Music.app"))
-        logger.info("Successfully authenticated with Music.app")
-
-        # Run analysis
-        print(info("Starting temperament analysis..."))
         analyzer = TemperamentAnalyzer(music_client, llm_client)
+        # ponytail: TemperamentAnalyzer.run() does full library; per-playlist
+        # filtering would require extending the analyzer — pass playlist hint via
+        # an env var or future run(playlist=...) API if needed.
+        if target_playlist:
+            print(info(f"Analysing playlist: {target_playlist}"))
         analyzer.run()
 
         print_footer()
@@ -143,7 +145,7 @@ def run_mood_analysis(args=None):
         print(error(f"Configuration error: {e}"))
         return 1
     except Exception as e:
-        logger.error(f"Temperament analysis failed: {e}", exc_info=True)
+        logger.error(f"Mood analysis failed: {e}", exc_info=True)
         print(error(f"Analysis failed: {e}"))
         return 1
 
@@ -742,26 +744,29 @@ def run_mood_show(args=None):
     print_header("🎭 Mood Map", "Current playlist mood assignments")
     try:
         am = AppleMusicInterface()
-        playlists = am.get_playlists()
-        # Group playlists whose parent folder starts with "4 Tempers"
-        buckets: dict[str, list[str]] = {"Woe": [], "Frolic": [], "Dread": [], "Malice": [], "Unclassified": []}
-        for pl in playlists:
-            parent = pl.get("parent_folder", "") or ""
-            name = pl.get("name", "")
+        folder_structure = am.get_playlist_folder_structure() or {}
+        buckets: dict[str, list[str]] = {"Woe": [], "Frolic": [], "Dread": [], "Malice": []}
+        other_folders: dict[str, list[str]] = {}
+
+        for folder_name, playlist_names in folder_structure.items():
             matched = False
-            for bucket in ("Woe", "Frolic", "Dread", "Malice"):
-                if bucket.lower() in parent.lower():
-                    buckets[bucket].append(name)
+            for bucket in buckets:
+                if bucket.lower() in folder_name.lower():
+                    buckets[bucket].extend(playlist_names)
                     matched = True
                     break
-            if not matched and pl.get("is_user_playlist", True):
-                buckets["Unclassified"].append(name)
+            if not matched and playlist_names:
+                other_folders[folder_name] = playlist_names
 
-        for bucket, names in buckets.items():
-            if names:
-                print(bold(f"\n{bucket} ({len(names)}):"))
-                for n in sorted(names):
-                    print(f"  • {n}")
+        any_mood = any(buckets.values())
+        if not any_mood:
+            print(info("No mood assignments found. Run: curator mood analyze --apply"))
+        else:
+            for bucket, names in buckets.items():
+                if names:
+                    print(bold(f"\n{bucket} ({len(names)}):"))
+                    for n in sorted(names):
+                        print(f"  • {n}")
         print_footer()
         return 0
     except Exception as e:
@@ -780,12 +785,12 @@ def run_mood_suggest(args=None):
     print_header("🎭 Mood Suggest", f"Playlists matching mood: {mood.title()}")
     try:
         am = AppleMusicInterface()
-        playlists = am.get_playlists()
-        matches = [
-            pl.get("name", "")
-            for pl in playlists
-            if mood.lower() in (pl.get("parent_folder", "") or "").lower()
-        ]
+        folder_structure = am.get_playlist_folder_structure() or {}
+        matches = []
+        for folder_name, playlist_names in folder_structure.items():
+            if mood.lower() in folder_name.lower():
+                matches.extend(playlist_names)
+
         if not matches:
             print(info(f"No playlists classified as '{mood.title()}' yet. Run: curator mood analyze --apply"))
         else:
