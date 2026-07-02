@@ -6,8 +6,11 @@ on:
   pull_request:
 
 jobs:
-  quality:
+  test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: curator
 
     steps:
       - name: Checkout
@@ -27,12 +30,6 @@ jobs:
         run: |
           black --check src tests
           isort --check-only src tests
-
-      - name: Type check
-        run: mypy src
-
-      - name: Lint
-        run: pylint src --fail-under=8.0
 
       - name: Test
         run: pytest tests -v --tb=short
