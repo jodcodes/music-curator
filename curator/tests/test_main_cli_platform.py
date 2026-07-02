@@ -584,3 +584,187 @@ class TestExportCommand:
         assert "jobs" in data
         assert len(data["runs"]) == 1
         assert data["summary"]["total_runs"] == 1
+
+
+# ============================================================================
+# jobs subcommand
+# ============================================================================
+
+class TestJobsCommand:
+    def test_jobs_list_returns_0(self, monkeypatch, tmp_path):
+        import main
+        import src.db as db
+        import src.library_state_store as lss
+
+        url = f"sqlite:///{tmp_path / 'jobs.db'}"
+        _, SessionLocal = db.init_db(url)
+        session = SessionLocal()
+        monkeypatch.setattr(lss, "get_session", lambda: session)
+        monkeypatch.setattr(db, "get_session", lambda: session)
+
+        class FakeJobStore:
+            def list_jobs(self, limit=20, status=None):
+                return 0, []
+
+        monkeypatch.setattr(main, "get_job_store", lambda: FakeJobStore())
+        assert main.main(["jobs", "list"]) == 0
+
+    def test_jobs_cancel_unknown_id_returns_1(self, monkeypatch):
+        import main
+
+        class FakeJobStore:
+            def update_job(self, job_id, **kw):
+                raise KeyError(job_id)
+
+        monkeypatch.setattr(main, "get_job_store", lambda: FakeJobStore())
+        from types import SimpleNamespace
+        args = SimpleNamespace(jobs_action="cancel", job_id="nonexistent")
+        assert main.run_jobs_command(args) == 1
+
+    def test_jobs_status_unknown_id_returns_1(self, monkeypatch):
+        import main
+
+        class FakeJobStore:
+            def get_job(self, job_id):
+                return None
+
+        monkeypatch.setattr(main, "get_job_store", lambda: FakeJobStore())
+        from types import SimpleNamespace
+        args = SimpleNamespace(jobs_action="status", job_id="xyz")
+        assert main.run_jobs_command(args) == 1
+
+
+# ============================================================================
+# mood sub-subcommands: show, suggest
+# ============================================================================
+
+class TestMoodShowSuggest:
+    def test_mood_show_requires_macos(self, monkeypatch):
+        import main
+        monkeypatch.setattr(main, "IS_MACOS", False)
+        assert main.run_mood_show() == 1
+
+    def test_mood_show_groups_by_folder(self, monkeypatch):
+        import main
+        monkeypatch.setattr(main, "IS_MACOS", True)
+
+        class FakeAM:
+            def get_playlists(self):
+                return [
+                    {"name": "Sad Mix", "parent_folder": "4 Tempers/Jazz Woe", "is_user_playlist": True},
+                    {"name": "Party", "parent_folder": "4 Tempers/Pop Frolic", "is_user_playlist": True},
+                    {"name": "No Mood", "parent_folder": "", "is_user_playlist": True},
+                ]
+
+        monkeypatch.setattr(main, "AppleMusicInterface", lambda: FakeAM())
+        from types import SimpleNamespace
+        assert main.run_mood_show(SimpleNamespace()) == 0
+
+    def test_mood_suggest_requires_macos(self, monkeypatch):
+        import main
+        monkeypatch.setattr(main, "IS_MACOS", False)
+        from types import SimpleNamespace
+        assert main.run_mood_suggest(SimpleNamespace(mood="woe")) == 1
+
+    def test_mood_suggest_no_mood_returns_1(self, monkeypatch):
+        import main
+        monkeypatch.setattr(main, "IS_MACOS", True)
+        from types import SimpleNamespace
+        assert main.run_mood_suggest(SimpleNamespace(mood=None)) == 1
+
+    def test_mood_suggest_filters_by_bucket(self, monkeypatch):
+        import main
+        monkeypatch.setattr(main, "IS_MACOS", True)
+
+        class FakeAM:
+            def get_playlists(self):
+                return [
+                    {"name": "Sad Mix", "parent_folder": "4 Tempers/Jazz Woe"},
+                    {"name": "Party", "parent_folder": "4 Tempers/Pop Frolic"},
+                ]
+
+        monkeypatch.setattr(main, "AppleMusicInterface", lambda: FakeAM())
+        from types import SimpleNamespace
+        assert main.run_mood_suggest(SimpleNamespace(mood="woe")) == 0
+
+
+# ============================================================================
+# import command
+# ============================================================================
+
+class TestImportCommand:
+    def test_import_requires_input_flag(self, monkeypatch):
+        import main
+        from types import SimpleNamespace
+        assert main.run_import(SimpleNamespace(input=None)) == 1
+
+    def test_import_missing_file_returns_1(self, monkeypatch):
+        import main
+        from types import SimpleNamespace
+        assert main.run_import(SimpleNamespace(input="/nonexistent/path.json")) == 1
+
+    def test_import_reads_export_json(self, monkeypatch, tmp_path):
+        import json, main
+        import src.db as db
+        import src.library_state_store as lss
+
+        url = f"sqlite:///{tmp_path / 'import.db'}"
+        _, SessionLocal = db.init_db(url)
+        session = SessionLocal()
+        monkeypatch.setattr(lss, "get_session", lambda: session)
+        monkeypatch.setattr(db, "get_session", lambda: session)
+
+        export_file = tmp_path / "export.json"
+        store = lss.LibraryStateStore(session=session)
+        run = store.create_run("scan", target="library", payload={})
+        store.finish_run(run.id, status="completed", processed_items=5)
+        runs = [r.to_dict() for r in store.list_runs(limit=10)]
+        export_file.write_text(json.dumps({"runs": runs, "dedupe_history": [], "jobs": []}))
+
+        from types import SimpleNamespace
+        assert main.run_import(SimpleNamespace(input=str(export_file))) == 0
+
+
+# ============================================================================
+# replay command
+# ============================================================================
+
+class TestReplayCommand:
+    def test_replay_requires_run_id(self):
+        import main
+        from types import SimpleNamespace
+        assert main.run_replay(SimpleNamespace(run_id=None)) == 1
+
+    def test_replay_unknown_run_returns_1(self, monkeypatch, tmp_path):
+        import main
+        import src.db as db
+        import src.library_state_store as lss
+
+        url = f"sqlite:///{tmp_path / 'replay.db'}"
+        _, SessionLocal = db.init_db(url)
+        session = SessionLocal()
+        monkeypatch.setattr(lss, "get_session", lambda: session)
+        monkeypatch.setattr(db, "get_session", lambda: session)
+
+        from types import SimpleNamespace
+        assert main.run_replay(SimpleNamespace(run_id="999")) == 1
+
+    def test_replay_unsupported_type_returns_1(self, monkeypatch, tmp_path):
+        import main
+        import src.db as db
+        import src.library_state_store as lss
+
+        url = f"sqlite:///{tmp_path / 'replay2.db'}"
+        _, SessionLocal = db.init_db(url)
+        session = SessionLocal()
+        monkeypatch.setattr(lss, "get_session", lambda: session)
+        monkeypatch.setattr(db, "get_session", lambda: session)
+
+        store = lss.LibraryStateStore(session=session)
+        run = store.create_run("export", target="library", payload={})
+        store.finish_run(run.id, status="completed", processed_items=0)
+        all_runs = store.list_runs(limit=5)
+        run_id = str(all_runs[0].id)
+
+        from types import SimpleNamespace
+        assert main.run_replay(SimpleNamespace(run_id=run_id)) == 1
