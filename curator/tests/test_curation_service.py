@@ -122,13 +122,13 @@ class AppleMusicWithGeneratedFavTracks(FakeAppleMusic):
                 "persistent_id": "track-1",
                 "name": "Track A",
                 "artist": "Artist A",
-                "target_playlist": "Hip Hop & RnB",
+                "target_playlist": "♥ Hip Hop & RnB",
             },
             {
                 "persistent_id": "stale-track",
                 "name": "Old Track",
                 "artist": "Artist Old",
-                "target_playlist": "Hip Hop & RnB",
+                "target_playlist": "♥ Hip Hop & RnB",
             },
         ]
 
@@ -240,8 +240,8 @@ def test_fav_preview_builds_assignments_and_changes():
     preview = service.preview_fav_songs()
 
     targets = [a["target_path"] for a in preview["assignments"]]
-    assert ["Fav Songs", "Fav Hip Hop & RnB"] in targets
-    assert ["Fav Songs", "Fav Electronic"] in targets
+    assert ["Fav Songs", "♥ Hip Hop & RnB"] in targets
+    assert ["Fav Songs", "♥ Electronic"] in targets
     assert set(preview["grouped"]["Hip Hop & RnB"]) == {
         "Woe",
         "Frolic",
@@ -318,7 +318,7 @@ def test_fav_preview_uses_title_for_apple_music_track_names():
     assert preview["assignments"][0]["item_name"] == "Apple Title"
     assert preview["assignments"][0]["target_path"] == [
         "Fav Songs",
-        "Fav Alternative & Indie",
+        "♥ Alternative & Indie",
     ]
 
 
@@ -346,19 +346,19 @@ def test_fav_preview_groups_requested_main_genres_once():
         "Techno",
     }
     targets = [assignment["target_path"] for assignment in preview["assignments"]]
-    assert ["Fav Songs", "Fav Rock"] in targets
-    assert ["Fav Songs", "Fav Alternative & Indie"] in targets
-    assert ["Fav Songs", "Fav House"] in targets
-    assert ["Fav Songs", "Fav Techno"] in targets
-    assert ["Fav Songs", "Fav Breakbeat/Jungle"] in targets
-    assert ["Fav Songs", "Fav IDM"] in targets
-    assert ["Fav Songs", "Fav Disco"] in targets
-    assert ["Fav Songs", "Fav Funk"] in targets
-    assert ["Fav Songs", "Fav Soul"] in targets
-    assert ["Fav Songs", "Fav Jazz"] in targets
-    assert ["Fav Songs", "Fav Blues"] in targets
-    assert ["Fav Songs", "Fav Pop"] in targets
-    assert ["Fav Songs", "Fav Lounge"] in targets
+    assert ["Fav Songs", "♥ Rock"] in targets
+    assert ["Fav Songs", "♥ Alternative & Indie"] in targets
+    assert ["Fav Songs", "♥ House"] in targets
+    assert ["Fav Songs", "♥ Techno"] in targets
+    assert ["Fav Songs", "♥ Breakbeat/Jungle"] in targets
+    assert ["Fav Songs", "♥ IDM"] in targets
+    assert ["Fav Songs", "♥ Disco"] in targets
+    assert ["Fav Songs", "♥ Funk"] in targets
+    assert ["Fav Songs", "♥ Soul"] in targets
+    assert ["Fav Songs", "♥ Jazz"] in targets
+    assert ["Fav Songs", "♥ Blues"] in targets
+    assert ["Fav Songs", "♥ Pop"] in targets
+    assert ["Fav Songs", "♥ Lounge"] in targets
 
 
 def test_fav_preview_plans_stale_generated_track_removals():
@@ -375,8 +375,8 @@ def test_fav_preview_plans_stale_generated_track_removals():
     assert remove_changes == [
         {
             "action": "remove_track",
-            "path": ["stale-track", "Fav Songs", "Hip Hop & RnB"],
-            "description": "Remove stale Old Track from Hip Hop & RnB",
+            "path": ["stale-track", "Fav Songs", "♥ Hip Hop & RnB"],
+            "description": "Remove stale Old Track from ♥ Hip Hop & RnB",
         }
     ]
 
@@ -493,6 +493,24 @@ def test_apply_fav_songs_bulk_delegates_assignments_to_bulk_applier():
     assert assignments[0].item_id == "track-2"
 
 
+def test_apply_fav_songs_bulk_full_run_removes_stale_tracks():
+    applier = SuccessfulFakeApplier()
+    service = CurationService(
+        apple_music=AppleMusicWithGeneratedFavTracks(),
+        temper_classifier=FakeTemperClassifier(),
+        applier=applier,
+    )
+
+    result = service.apply_fav_songs_bulk(confirmed=True)
+
+    remove_changes = [change for change in applier.calls[0][0] if change.action == "remove_track"]
+    assert result["success"] is True
+    assert result["stale_removal"]["success"] is True
+    assert [change.path for change in remove_changes] == [
+        ("stale-track", "Fav Songs", "♥ Hip Hop & RnB")
+    ]
+
+
 def test_apply_fav_songs_batched_reuses_one_preview_for_multiple_batches():
     applier = SuccessfulFakeApplier()
     apple_music = FakeAppleMusic()
@@ -592,6 +610,6 @@ def test_fav_preview_applies_store_overrides_over_auto_assignments(tmp_path):
     preview = service.preview_fav_songs()
 
     overridden = next(a for a in preview["assignments"] if a["item_id"] == "track-1")
-    assert overridden["target_path"] == ["Fav Songs", "Fav Ambient"]
+    assert overridden["target_path"] == ["Fav Songs", "♥ Ambient"]
     assert overridden["source"] == "manual"
     assert overridden["manual_override"] is True

@@ -363,6 +363,28 @@ class CurationService:
             assignment_dicts = assignment_dicts[:max_tracks]
         assignments = [CurationAssignment.from_dict(item) for item in assignment_dicts]
         result = self.applier.apply_fav_tracks_bulk(assignments, confirmed=confirmed)
+        if result.get("success") and offset == 0 and max_tracks is None:
+            remove_changes = [
+                AppleMusicChange(
+                    str(change["action"]),
+                    list(change["path"]),
+                    str(change["description"]),
+                )
+                for change in preview["changes"]
+                if change.get("action") == "remove_track"
+            ]
+            if remove_changes:
+                removal_result = self.applier.apply_changes(
+                    remove_changes, confirmed=confirmed
+                )
+                result["stale_removal"] = removal_result
+                result["success"] = bool(removal_result.get("success"))
+                result["applied"] = int(result.get("applied") or 0) + int(
+                    removal_result.get("applied") or 0
+                )
+                result["failed"] = int(result.get("failed") or 0) + int(
+                    removal_result.get("failed") or 0
+                )
         result["preview"] = {
             **preview,
             "assignments": assignment_dicts,

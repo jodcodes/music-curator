@@ -15,7 +15,9 @@ class RealisticFakeDetector:
 
 class FakeTagManager:
     def is_format_supported(self, filepath):
-        return filepath.lower().endswith((".mp3", ".flac", ".ogg", ".oga", ".m4a", ".m4b"))
+        return filepath.lower().endswith(
+            (".mp3", ".flac", ".ogg", ".oga", ".m4a", ".m4b", ".aiff", ".aif", ".wav")
+        )
 
     def read_tags(self, filepath):
         return {

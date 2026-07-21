@@ -8,6 +8,8 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from apple2spfy.config import Config
+from apple2spfy.cache_manager import CacheManager
+import sync_playlists
 from sync_playlists import SpotifyManager, PlaylistSync
 
 
@@ -124,3 +126,39 @@ def test_dry_run_no_writes(tmp_path, monkeypatch):
     # Ensure no additions/removals were sent to Spotify
     assert fake_sp.add_calls == []
     assert fake_sp.rem_calls == []
+
+
+def test_show_history_does_not_create_sync_client(monkeypatch):
+    """History-only commands should not authenticate or instantiate the sync client."""
+    monkeypatch.setattr(sys, "argv", ["sync_playlists.py", "--show-history"])
+
+    def fail_playlist_sync(*args, **kwargs):
+        raise AssertionError("PlaylistSync should not be created for --show-history")
+
+    class FakeHistory:
+        def get_history(self):
+            return []
+
+    monkeypatch.setattr(sync_playlists, "PlaylistSync", fail_playlist_sync)
+    monkeypatch.setattr(sync_playlists, "TransferHistory", FakeHistory)
+
+    assert sync_playlists.main() == 0
+
+
+def test_show_mappings_uses_package_cache_manager(tmp_path, monkeypatch, capsys):
+    """Mapping-only commands should use the package import path and avoid sync setup."""
+    db_file = tmp_path / "test.db"
+    monkeypatch.setattr(Config, "SQLITE_DB_PATH", str(db_file))
+    CacheManager().save_playlist_mapping("Apple List", "spotify123", "Spotify List")
+    monkeypatch.setattr(sys, "argv", ["sync_playlists.py", "--show-mappings"])
+
+    class FakePlaylistSync:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr(sync_playlists, "PlaylistSync", FakePlaylistSync)
+
+    assert sync_playlists.main() == 0
+    output = capsys.readouterr().out
+    assert "Apple List" in output
+    assert "spotify123" in output

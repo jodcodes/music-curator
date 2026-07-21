@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 from src.metadata_enrichment import (
     DatabaseSource,
+    DownloadedTrackDetector,
     EnrichedMetadata,
     MetadataEnricher,
     MetadataEntry,
@@ -438,6 +439,22 @@ class TestPerformanceRequirements(unittest.TestCase):
         # Spec: max 500 tracks/session
         max_tracks = 500
         self.assertEqual(max_tracks, 500)
+
+
+class TestDownloadedTrackDetectorSupportedFormats(unittest.TestCase):
+    """AIFF/AIF/WAV must be recognized as supported audio formats."""
+
+    def setUp(self):
+        self.detector = DownloadedTrackDetector(library_paths=[])
+
+    def test_get_supported_formats_includes_aiff_aif_wav(self):
+        formats = self.detector.get_supported_formats()
+        self.assertIn(".aiff", formats)
+        self.assertIn(".aif", formats)
+        self.assertIn(".wav", formats)
+
+    def test_is_audio_file_true_for_aif(self):
+        self.assertTrue(self.detector.is_audio_file("/tmp/song.aif"))
 
 
 if __name__ == "__main__":

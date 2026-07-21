@@ -282,5 +282,9 @@ function run() {
 	log(`--- Sync beendet: ${new Date().toLocaleString("de-DE")} ---`);
 	log("");
 
+	// Echte Add-/Track-Fehler dürfen nie als erfolgreicher Gesamtlauf erscheinen.
+	if (errors > 0) {
+		throw new Error(`${summary} — ${errors} Fehler, siehe ${ERROR_FILE}`);
+	}
 	return summary;
 }
