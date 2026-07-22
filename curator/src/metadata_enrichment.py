@@ -215,7 +215,7 @@ class DownloadedTrackDetector:
 
     def get_supported_formats(self) -> List[str]:
         """Get list of supported audio file formats."""
-        return [".mp3", ".flac", ".ogg", ".m4a", ".aiff", ".wav"]
+        return [".mp3", ".flac", ".ogg", ".m4a", ".aiff", ".aif", ".wav"]
 
     def is_audio_file(self, filepath: str) -> bool:
         """Check if file is a supported audio format."""

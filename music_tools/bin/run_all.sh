@@ -23,6 +23,9 @@ STATE_DIR="$REPO_DIR/state"
 LOG_FILE="$LOG_DIR/run.log"
 STAMP_FILE="$STATE_DIR/.last_sync"
 
+# shellcheck source=lib/resolve_curator_python.sh
+source "$REPO_DIR/bin/lib/resolve_curator_python.sh"
+
 mkdir -p "$LOG_DIR" "$STATE_DIR"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG_FILE"; }
@@ -49,7 +52,6 @@ export MUSIC_TOOLS_SSD_MOUNT="$SSD_MOUNT"
 export MUSIC_TOOLS_LIBRARY_PATH="$MUSIC_LIBRARY_PATH"
 
 CURATOR_DIR="$(cd "$REPO_DIR/../curator" && pwd)"
-CURATOR_CMD=(/usr/bin/env python3 "$CURATOR_DIR/main.py" curate --scope fav_songs)
 
 if [ -f "$STAMP_FILE" ]; then
     LAST=$(cat "$STAMP_FILE" 2>/dev/null || echo 0)
@@ -65,13 +67,21 @@ fi
 log "=== Start ==="
 OVERALL_RC=0
 
-if [ -d "$CURATOR_DIR" ]; then
-    log "→ curator curate --scope fav_songs"
-    if ! (cd "$CURATOR_DIR" && "${CURATOR_CMD[@]}") >> "$LOG_DIR/curate_fav_songs.log" 2>> "$LOG_DIR/curate_fav_songs.err.log"; then
-        log "  curation dry-run failed; keeping existing scheduler cadence"
-    fi
+log "→ curator curate --scope fav_songs [START]"
+if [ ! -d "$CURATOR_DIR" ]; then
+    log "  [FAIL] missing curator dir: $CURATOR_DIR"
+    OVERALL_RC=1
+elif ! CURATOR_PY="$(resolve_curator_python "$CURATOR_DIR" 2>>"$LOG_DIR/curate_fav_songs.err.log")"; then
+    log "  [FAIL] no usable curator interpreter (see curate_fav_songs.err.log)"
+    OVERALL_RC=1
 else
-    log "missing: $CURATOR_DIR"
+    if (cd "$CURATOR_DIR" && "$CURATOR_PY" main.py curate --scope fav_songs) >> "$LOG_DIR/curate_fav_songs.log" 2>> "$LOG_DIR/curate_fav_songs.err.log"; then
+        log "  [SUCCESS] rc=0"
+    else
+        rc=$?
+        log "  [FAIL] curator curate exited rc=$rc (see curate_fav_songs.err.log)"
+        OVERALL_RC=1
+    fi
 fi
 
 run_script() {
@@ -81,14 +91,18 @@ run_script() {
     local out="$LOG_DIR/${name}.log"
     local err="$LOG_DIR/${name}.err.log"
 
-    log "→ $name"
+    log "→ $name [START]"
     case "$script" in
         *.js)                 /usr/bin/osascript -l JavaScript "$script" >> "$out" 2>> "$err" ;;
         *.scpt|*.applescript) /usr/bin/osascript "$script" >> "$out" 2>> "$err" ;;
-        *)                    log "  unbekannter Script-Typ: $script"; return 1 ;;
+        *)                    log "  [FAIL] unbekannter Script-Typ: $script"; return 1 ;;
     esac
     local rc=$?
-    log "  rc=$rc"
+    if [ "$rc" -eq 0 ]; then
+        log "  [SUCCESS] rc=0"
+    else
+        log "  [FAIL] $name exited rc=$rc (see ${name}.err.log)"
+    fi
     return $rc
 }
 

@@ -28,83 +28,25 @@ fi
 echo ""
 echo "Creating auto-sync wrapper script..."
 
-# Create auto_sync_on_drive.sh
-cat > "$SCRIPT_DIR/auto_sync_on_drive.sh" << 'EOF'
-#!/bin/bash
-
-# Configuration
-DRIVE_NAME="DRIVE_NAME_PLACEHOLDER"
-DRIVE_PATH="/Volumes/$DRIVE_NAME"
-SCRIPT_DIR="SCRIPT_DIR_PLACEHOLDER"
-FALLBACK_PYTHON="FALLBACK_PYTHON_PLACEHOLDER"
-SYNC_MARKER="$DRIVE_PATH/.apple2spfy_synced"
-LOG_FILE="/tmp/apple2spfy_drive.log"
-
-# Auto-detect Python path (venv, conda, or system)
-detect_python() {
-    # Check if we're in a virtual environment
-    if [ -n "$VIRTUAL_ENV" ]; then
-        echo "$VIRTUAL_ENV/bin/python3"
-    # Check if we're in a conda environment
-    elif [ -n "$CONDA_PREFIX" ]; then
-        echo "$CONDA_PREFIX/bin/python3"
-    # Check for venv in script directory
-    elif [ -f "$SCRIPT_DIR/venv/bin/python3" ]; then
-        echo "$SCRIPT_DIR/venv/bin/python3"
-    # Fall back to the Python that was active during setup
-    else
-        echo "$FALLBACK_PYTHON"
-    fi
-}
-
-PYTHON_CMD=$(detect_python)
-
-# Check if drive is mounted
-if [ ! -d "$DRIVE_PATH" ]; then
-    exit 0
-fi
-
-LAST_RUN_FILE="$HOME/.apple2spfy_last_run"
-
-# Check if last run was less than 24 hours ago
-if [ -f "$LAST_RUN_FILE" ]; then
-    LAST_RUN=$(cat "$LAST_RUN_FILE")
-    CURRENT_TIME=$(date +%s)
-    TIME_DIFF=$((CURRENT_TIME - LAST_RUN))
-    
-    # 24 hours = 86400 seconds
-    if [ $TIME_DIFF -lt 86400 ]; then
-        HOURS_LEFT=$(((86400 - TIME_DIFF) / 3600))
-        echo "$(date): Less than 24h since last sync (approx ${HOURS_LEFT}h remaining). Skipping." >> "$LOG_FILE"
-        exit 0
-    fi
-fi
-
-# Run sync
-echo "$(date): Drive '$DRIVE_NAME' detected and 24h passed, starting playlist sync..." >> "$LOG_FILE"
-cd "$SCRIPT_DIR"
-
-# Run the sync
-$PYTHON_CMD sync_playlists.py --clean-sync >> "$LOG_FILE" 2>&1
-SYNC_EXIT_CODE=$?
-
-# Create marker file if successful
-if [ $SYNC_EXIT_CODE -eq 0 ]; then
-    date +%s > "$LAST_RUN_FILE"
-    echo "$(date): ✅ Sync completed successfully" >> "$LOG_FILE"
-else
-    echo "$(date): ❌ Sync failed with exit code $SYNC_EXIT_CODE" >> "$LOG_FILE"
+# Generate auto_sync_on_drive.sh FROM the template (the single source of
+# truth for the wrapper's body) — never keep a second embedded copy here,
+# or the template and the deployed wrapper drift apart.
+TEMPLATE="$SCRIPT_DIR/scripts/auto_sync_on_drive.sh.template"
+if [ ! -f "$TEMPLATE" ]; then
+    echo "❌ Error: template not found at $TEMPLATE"
     exit 1
 fi
-EOF
 
-# Replace placeholders
-sed -i '' "s|DRIVE_NAME_PLACEHOLDER|$DRIVE_NAME|g" "$SCRIPT_DIR/auto_sync_on_drive.sh"
-sed -i '' "s|SCRIPT_DIR_PLACEHOLDER|$SCRIPT_DIR|g" "$SCRIPT_DIR/auto_sync_on_drive.sh"
-sed -i '' "s|FALLBACK_PYTHON_PLACEHOLDER|$CURRENT_PYTHON|g" "$SCRIPT_DIR/auto_sync_on_drive.sh"
-
+cp "$TEMPLATE" "$SCRIPT_DIR/auto_sync_on_drive.sh"
+sed -i '' "s|DRIVE_NAME=\"YOUR_DRIVE_NAME\"|DRIVE_NAME=\"$DRIVE_NAME\"|" "$SCRIPT_DIR/auto_sync_on_drive.sh"
+sed -i '' "s|FALLBACK_PYTHON_PLACEHOLDER|$CURRENT_PYTHON|" "$SCRIPT_DIR/auto_sync_on_drive.sh"
 
 chmod +x "$SCRIPT_DIR/auto_sync_on_drive.sh"
+
+if ! bash -n "$SCRIPT_DIR/auto_sync_on_drive.sh"; then
+    echo "❌ Error: generated auto_sync_on_drive.sh failed syntax check"
+    exit 1
+fi
 echo "✅ Created: auto_sync_on_drive.sh"
 
 # Create Launch Agent
@@ -146,16 +88,21 @@ EOF
 
 echo "✅ Created: $PLIST_PATH"
 
+# Validate the generated plist before ever loading it.
+if ! plutil -lint "$PLIST_PATH" >/dev/null; then
+    echo "❌ Error: generated plist failed validation (plutil -lint): $PLIST_PATH"
+    exit 1
+fi
+echo "✅ plist validated (plutil -lint)"
+
 # Load Launch Agent
 echo "Loading Launch Agent..."
 launchctl unload "$PLIST_PATH" 2>/dev/null
-launchctl load "$PLIST_PATH"
-
-if [ $? -eq 0 ]; then
-    echo "✅ Launch Agent loaded successfully"
-else
-    echo "⚠️  Warning: Failed to load Launch Agent"
+if ! launchctl load "$PLIST_PATH"; then
+    echo "❌ Error: failed to load Launch Agent: $PLIST_PATH"
+    exit 1
 fi
+echo "✅ Launch Agent loaded successfully"
 
 echo ""
 echo "╔════════════════════════════════════════════════════════════╗"

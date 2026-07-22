@@ -147,7 +147,7 @@ end if
 
 -- 🎵 Hauptlogik
 set lastRunDate to loadLastRunDate()
-my writeToFile("=== Skriptstart ===", logFile)
+my writeToFile("=== Skriptstart [START] ===", logFile)
 my writeToFile("Letzter Lauf: " & (lastRunDate as string), logFile)
 
 set totalConsidered to 0
@@ -155,6 +155,7 @@ set totalAdded to 0
 set totalAlreadyIn to 0
 set totalAlbumsProcessed to 0
 set totalAlbumsMissing to 0
+set totalTrackErrors to 0
 
 tell application "Music"
 	repeat with apPair in albumPlaylistMap
@@ -191,6 +192,9 @@ tell application "Music"
 					else
 						set alreadyHere to alreadyHere + 1
 					end if
+				on error errMsg
+					my writeToFile("⚠️ Track-Fehler bei '" & playlistName & "': " & errMsg, errorFile)
+					set totalTrackErrors to totalTrackErrors + 1
 				end try
 			end repeat
 			
@@ -204,10 +208,19 @@ tell application "Music"
 	end repeat
 end tell
 
-my writeToFile("📊 Zusammenfassung: " & totalAdded & " hinzugefügt | " & totalAlreadyIn & " bereits drin | " & totalConsidered & " geprüft | " & totalAlbumsProcessed & " Playlists OK | " & totalAlbumsMissing & " Playlists fehlen", logFile)
+my writeToFile("📊 Zusammenfassung: " & totalAdded & " hinzugefügt | " & totalAlreadyIn & " bereits drin | " & totalConsidered & " geprüft | " & totalAlbumsProcessed & " Playlists OK | " & totalAlbumsMissing & " Playlists fehlen | " & totalTrackErrors & " Track-Fehler", logFile)
 
-my saveLastRunDate(current date)
-my writeToFile("=== Skriptende ===" & linefeed, logFile)
+-- Checkpoint nur bei vollständigem Erfolg verschieben: eine fehlende Ziel-
+-- Playlist oder ein fehlgeschlagener Track dürfen die betroffene Arbeit nie
+-- dauerhaft verlieren. Bleibt lastRunDate stehen, greift sie beim nächsten
+-- Lauf erneut (date added > lastRunDate).
+if totalAlbumsMissing is 0 and totalTrackErrors is 0 then
+	my saveLastRunDate(current date)
+	my writeToFile("=== Skriptende [SUCCESS] ===" & linefeed, logFile)
+else
+	my writeToFile("=== Skriptende [FAIL] " & totalAlbumsMissing & " Playlist(s) fehlen, " & totalTrackErrors & " Track-Fehler — Checkpoint NICHT verschoben ===" & linefeed, logFile)
+	error "route_albums_to_playlists: " & totalAlbumsMissing & " missing playlist(s), " & totalTrackErrors & " track error(s) — see " & errorFile number 1
+end if
 
 
 

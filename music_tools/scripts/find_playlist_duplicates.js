@@ -207,6 +207,10 @@ function run(argv) {
 		// Gruppieren nach normalisiertem Schlüssel (Artist|||Title)
 		const groups = new Map();
 		for (let i = 0; i < trackCount; i++) {
+			// Kaputte Tracks bzw. Tracks ohne persistent ID werden nie verglichen:
+			// ihre Identität ist nicht vertrauenswürdig genug, um als Duplikat-
+			// Kandidat (Keeper oder Loser) zu gelten.
+			if (!ids[i]) continue;
 			const key = normKey(artists[i], names[i]);
 			if (!key || key === "|||") continue;
 			const entry = {
@@ -266,5 +270,11 @@ function run(argv) {
 	log(summary);
 	log(`--- Duplicate-Scan beendet: ${new Date().toLocaleString("de-DE")} ---`);
 	log("");
+	// Echte Lese-/Löschfehler dürfen nie als erfolgreicher Gesamtlauf erscheinen.
+	// Ein vollständig erfolgreicher Bulk-Fetch-Fallback zählt NICHT als Fehler
+	// (nur als Warnung, bereits oben geloggt) und wirft daher nicht.
+	if (totalErrors > 0) {
+		throw new Error(`${summary} — ${totalErrors} Fehler, siehe ${ERROR_FILE}`);
+	}
 	return summary;
 }

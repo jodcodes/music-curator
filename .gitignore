@@ -48,6 +48,8 @@ results.json
 .superpowers/
 todo
 openspec_upstream
+.claude/
+.serena/
 
 # separate local project; contains its own git repo and credentials
 pitch2play/

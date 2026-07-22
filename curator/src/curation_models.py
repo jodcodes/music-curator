@@ -38,7 +38,7 @@ def normalize_fav_genre_label(genre: str) -> str:
 
 
 def fav_playlist_name(genre: str, temperament: TemperBucket) -> str:
-    return f"Fav {normalize_fav_genre_label(genre)}"
+    return f"♥ {normalize_fav_genre_label(genre)}"
 
 
 def temper_playlist_name(genre: str, temperament: TemperBucket) -> str:

@@ -6,8 +6,10 @@ Supports multiple formats:
 - FLAC: Vorbis comments
 - OGG: Vorbis comments
 - M4A: iTunes atoms
+- AIFF/AIF/WAV: ID3v2 tags (via mutagen's AIFF/WAVE containers)
 
-No external dependencies - uses stdlib only with format-specific parsing.
+Reads use stdlib-only parsing where practical; writes for ID3-based formats
+(MP3, AIFF/AIF/WAV) and M4A use mutagen.
 """
 
 import logging
@@ -408,10 +410,122 @@ class M4ATagHandler(AudioTagHandler):
             return False
 
 
+class AIFFWAVTagHandler(AudioTagHandler):
+    """Handler for AIFF/AIF/WAV files, tagged via mutagen's ID3 support.
+
+    Both mutagen.aiff.AIFF and mutagen.wave.WAVE embed a standard ID3v2 tag
+    chunk, so this reuses MP3's ID3 frame mapping instead of inventing a
+    separate tagging scheme.
+    """
+
+    FRAME_MAPPING = MP3TagHandler.FRAME_MAPPING
+
+    def supports_format(self) -> bool:
+        """Check if file is AIFF/AIF/WAV."""
+        return self.filepath.lower().endswith((".aiff", ".aif", ".wav"))
+
+    def _mutagen_class(self):
+        if self.filepath.lower().endswith(".wav"):
+            from mutagen.wave import WAVE
+
+            return WAVE
+        from mutagen.aiff import AIFF
+
+        return AIFF
+
+    def read_tags(self) -> Dict[str, str]:
+        """
+        Read ID3v2 tags from an AIFF/AIF/WAV file.
+
+        Returns: {field: value} dict
+        """
+        tags: Dict[str, str] = {}
+
+        try:
+            audio_cls = self._mutagen_class()
+            audio = audio_cls(self.filepath)
+            if not audio.tags:
+                return tags
+
+            for field, frame_id in self.FRAME_MAPPING.items():
+                frame = audio.tags.get(frame_id)
+                if frame is None:
+                    continue
+                try:
+                    text = str(frame.text[0])
+                except (AttributeError, IndexError):
+                    continue
+                if text:
+                    tags[field] = text
+
+        except ImportError:
+            self.logger.warning("mutagen not installed - cannot read AIFF/WAV tags")
+        except Exception as e:
+            self.logger.warning(f"Error reading tags from {self.filepath}: {e}")
+
+        return tags
+
+    def write_tags(self, tags: Dict[str, str], overwrite: bool = False) -> bool:
+        """
+        Write ID3v2 tags to an AIFF/AIF/WAV file.
+
+        Args:
+            tags: {field: value} dict
+            overwrite: Whether to overwrite existing tags
+
+        Returns:
+            True if successful
+        """
+        if not os.path.exists(self.filepath):
+            self.logger.warning(f"File not found: {self.filepath}")
+            return False
+
+        try:
+            from mutagen.id3 import TALB, TBPM, TCON, TDRC, TIT2, TPE1
+
+            frame_classes = {
+                "TBPM": TBPM,
+                "TCON": TCON,
+                "TDRC": TDRC,
+                "TPE1": TPE1,
+                "TIT2": TIT2,
+                "TALB": TALB,
+            }
+
+            audio_cls = self._mutagen_class()
+            audio = audio_cls(self.filepath)
+            if audio.tags is None:
+                audio.add_tags()
+
+            for field, value in tags.items():
+                clean_value = str(value).strip()
+                if not clean_value:
+                    continue
+
+                frame_id = self.FRAME_MAPPING.get(field, field)
+                frame_class = frame_classes.get(frame_id)
+                if frame_class is None:
+                    self.logger.debug(f"Unsupported AIFF/WAV tag field: {field}")
+                    continue
+                if frame_id in audio.tags and not overwrite:
+                    continue
+
+                audio.tags.setall(frame_id, [frame_class(encoding=3, text=[clean_value])])
+
+            audio.save()
+            return True
+        except ImportError:
+            self.logger.warning("mutagen not installed - cannot write AIFF/WAV tags")
+            return False
+        except Exception as e:
+            self.logger.error(f"Failed to write AIFF/WAV tags to {self.filepath}: {e}")
+            return False
+
+
 class AudioTagFactory:
     """Factory for creating appropriate tag handlers."""
 
-    HANDLERS = [MP3TagHandler, FLACTagHandler, OGGTagHandler, M4ATagHandler]  # type: ignore[misc]
+    HANDLERS = [MP3TagHandler, FLACTagHandler, OGGTagHandler, M4ATagHandler, AIFFWAVTagHandler]  # type: ignore[misc]
 
     @staticmethod
     def create_handler(filepath: str) -> Optional[AudioTagHandler]:
@@ -434,7 +548,7 @@ class AudioTagFactory:
     @staticmethod
     def get_supported_formats() -> list:
         """Get list of supported file extensions."""
-        return [".mp3", ".flac", ".ogg", ".oga", ".m4a", ".m4b"]
+        return [".mp3", ".flac", ".ogg", ".oga", ".m4a", ".m4b", ".aiff", ".aif", ".wav"]
 
 
 class TagManager:

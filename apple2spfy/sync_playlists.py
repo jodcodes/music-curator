@@ -1577,15 +1577,21 @@ class PlaylistSync:
                     pass
             
             # Summary
+            failed_playlists = [name for name, data in sync_stats.items() if "error" in data]
             if map_only:
                 self.logger.info("🎉 Mapping completed!")
             else:
                 self.logger.info("🎉 Sync completed!")
                 self.logger.info(f"📊 Total tracks added: {total_tracks_added}")
                 self.logger.info(f"🗑️  Total tracks removed: {total_tracks_removed}")
-                
-                # If we completed successfully without exceptions and it wasn't a dry run, clear the state
-                if not dry_run:
+
+                if failed_playlists:
+                    self.logger.warning(
+                        f"⚠️  {len(failed_playlists)} playlist(s) failed: {', '.join(failed_playlists)}. "
+                        "Keeping resume state so a retry only re-processes the failures."
+                    )
+                elif not dry_run:
+                    # Only a fully successful, non-dry-run pass clears resume state.
                     sync_state_manager.clear()
             
             self.logger.info(f"📋 Playlists processed: {total_playlists}")
@@ -1691,8 +1697,6 @@ def main():
         if args.minimal:
             # reduce global verbosity for minimal mode
             logging.getLogger().setLevel(logging.ERROR)
-        sync = PlaylistSync()
-        sync = PlaylistSync(minimal_output=args.minimal, show_cache=args.cache_summary, dry_run=args.dry_run)
 
         # Handle transfer history options
         if args.show_history or args.playlist_history or args.clear_history:
@@ -1748,7 +1752,7 @@ def main():
 
         # Handle playlist mapping options
         if args.show_mappings or args.show_mapping or args.clear_mappings:
-            from cache_manager import CacheManager
+            from apple2spfy.cache_manager import CacheManager
             cache_mgr = CacheManager()
             
             if args.clear_mappings:
@@ -1810,6 +1814,8 @@ def main():
                 print("Cleared caches")
             else:
                 print("Failed to clear caches")
+
+        sync = PlaylistSync(minimal_output=args.minimal, show_cache=args.cache_summary, dry_run=args.dry_run)
         stats = sync.sync_all_playlists(
             clean_sync=args.clean_sync, 
             force_sync=args.force_sync,
@@ -1822,15 +1828,21 @@ def main():
         print("\n" + "="*50)
         print(title)
         print("="*50)
+        any_playlist_failed = False
         for playlist_name, stats_data in stats.items():
             if "error" in stats_data:
                 print(f"❌ {playlist_name}: ERROR - {stats_data['error']}")
+                any_playlist_failed = True
             elif args.map_only:
                 print(f"✅ {playlist_name}: Mapped to {stats_data.get('spotify_id')} ({stats_data['total_tracks']} tracks)")
             else:
                 print(f"✅ {playlist_name}: +{stats_data['tracks_added']} -{stats_data['tracks_removed']} ({stats_data['total_tracks']} total)")
         print("="*50)
-        
+
+        if any_playlist_failed:
+            logger.error("One or more playlists failed to sync; exiting nonzero.")
+            return 1
+
     except PlaylistSyncError as e:
         logger.error(f"Sync failed: {e}")
         return 1

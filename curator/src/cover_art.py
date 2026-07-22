@@ -14,7 +14,7 @@ Sources for cover art:
 Features:
 - Download cover art from multiple sources
 - Cache downloaded images to avoid re-downloads
-- Embed artwork in audio files (MP4, MP3)
+- Embed artwork in audio files (MP4, MP3, AIFF/AIF/WAV)
 - Validate image format and size
 - Handle fallback sources gracefully
 """
@@ -519,6 +519,52 @@ class CoverArtEmbedder:
             self.logger.error(f"Failed to embed cover art in MP3: {e}")
             return False
 
+    def embed_aiff_wav(self, filepath: str, image_data: bytes) -> bool:
+        """
+        Embed cover art in an AIFF/AIF/WAV file via the same ID3 APIC frame
+        MP3 uses (mutagen.aiff.AIFF and mutagen.wave.WAVE both wrap ID3).
+
+        Args:
+            filepath: Path to audio file
+            image_data: Image bytes to embed
+
+        Returns:
+            True if successful
+        """
+        try:
+            from mutagen.id3 import APIC
+
+            if filepath.lower().endswith(".wav"):
+                from mutagen.wave import WAVE as audio_cls
+            else:
+                from mutagen.aiff import AIFF as audio_cls
+
+            audio = audio_cls(filepath)
+            if audio.tags is None:
+                audio.add_tags()
+
+            if image_data.startswith(b"\xff\xd8\xff"):  # JPEG
+                mime_type = "image/jpeg"
+            elif image_data.startswith(b"\x89PNG"):  # PNG
+                mime_type = "image/png"
+            else:
+                self.logger.warning(f"Unknown image format for {filepath}")
+                return False
+
+            audio.tags.add(
+                APIC(encoding=3, mime=mime_type, type=3, desc="Cover", data=image_data)
+            )
+            audio.save()
+            self.logger.debug(f"Embedded cover art in AIFF/WAV: {filepath}")
+            return True
+
+        except ImportError:
+            self.logger.warning("mutagen not installed - cannot embed AIFF/WAV cover art")
+            return False
+        except Exception as e:
+            self.logger.error(f"Failed to embed cover art in AIFF/WAV: {e}")
+            return False
+
     def embed(self, filepath: str, image_data: bytes) -> bool:
         """
         Embed cover art in audio file.
@@ -540,6 +586,8 @@ class CoverArtEmbedder:
             return self.embed_mp4(filepath, image_data)
         elif ext in {".mp3"}:
             return self.embed_mp3(filepath, image_data)
+        elif ext in {".aiff", ".aif", ".wav"}:
+            return self.embed_aiff_wav(filepath, image_data)
         else:
             self.logger.warning(f"Unsupported audio format: {ext}")
             return False

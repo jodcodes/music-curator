@@ -14,6 +14,7 @@ import unittest
 from unittest.mock import MagicMock, Mock, patch
 
 from src.cover_art import CoverArtDownloader, CoverArtEmbedder, CoverArtManager
+from tests.conftest import write_minimal_aiff, write_minimal_wav
 
 
 class TestCoverArtDownloader(unittest.TestCase):
@@ -293,7 +294,7 @@ class TestCoverArtEmbedder(unittest.TestCase):
 
     def test_unsupported_audio_format(self):
         """Test unsupported audio format."""
-        filepath = os.path.join(self.temp_dir, "test.wav")
+        filepath = os.path.join(self.temp_dir, "test.xyz")
         image_data = b"\xff\xd8\xff"
 
         # Create dummy file
@@ -303,6 +304,57 @@ class TestCoverArtEmbedder(unittest.TestCase):
         result = self.embedder.embed(filepath, image_data)
 
         self.assertFalse(result)
+
+    @patch("src.cover_art.CoverArtEmbedder.embed_aiff_wav")
+    def test_embed_wav_extension(self, mock_embed_aiff_wav):
+        """Test WAV files are routed to embed_aiff_wav."""
+        mock_embed_aiff_wav.return_value = True
+
+        filepath = os.path.join(self.temp_dir, "test.wav")
+        image_data = b"\xff\xd8\xff"  # JPEG header
+        with open(filepath, "wb") as f:
+            f.write(b"dummy")
+
+        self.embedder.embed(filepath, image_data)
+
+        mock_embed_aiff_wav.assert_called_once()
+
+    @patch("src.cover_art.CoverArtEmbedder.embed_aiff_wav")
+    def test_embed_aiff_extension(self, mock_embed_aiff_wav):
+        """Test AIFF/AIF files are routed to embed_aiff_wav."""
+        mock_embed_aiff_wav.return_value = True
+
+        filepath = os.path.join(self.temp_dir, "test.aiff")
+        image_data = b"\xff\xd8\xff"
+        with open(filepath, "wb") as f:
+            f.write(b"dummy")
+
+        self.embedder.embed(filepath, image_data)
+
+        mock_embed_aiff_wav.assert_called_once()
+
+    def test_embed_aiff_wav_roundtrip_real_file(self):
+        """Cover art embedded in AIFF/WAV must be readable back via mutagen's ID3 APIC frame."""
+        mutagen_id3 = __import__("pytest").importorskip("mutagen.id3")
+
+        for ext, writer in ((".aiff", write_minimal_aiff), (".wav", write_minimal_wav)):
+            with self.subTest(ext=ext):
+                filepath = os.path.join(self.temp_dir, f"real{ext}")
+                writer(filepath)
+                image_data = b"\xff\xd8\xff" + b"fake jpeg bytes"
+
+                result = self.embedder.embed(filepath, image_data)
+
+                self.assertTrue(result)
+                audio_cls = (
+                    __import__("mutagen.wave", fromlist=["WAVE"]).WAVE
+                    if ext == ".wav"
+                    else __import__("mutagen.aiff", fromlist=["AIFF"]).AIFF
+                )
+                audio = audio_cls(filepath)
+                apic = audio.tags.get("APIC:Cover")
+                self.assertIsNotNone(apic)
+                self.assertEqual(apic.data, image_data)
 
     def test_nonexistent_file(self):
         """Test embedding in non-existent file."""
