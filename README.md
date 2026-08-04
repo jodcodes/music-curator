@@ -6,6 +6,7 @@ Monorepo for Apple Music automation tools.
 music-curator/
 ├── curator/          ← main product: enrich · mood · organize · curate
 ├── apple2spfy/       ← sync Apple Music playlists to Spotify
+├── spfy2apple/       ← sync Spotify followed playlists to Apple Music
 ├── pitch2play/       ← pitch detection and playlist routing
 ├── music_tools/      ← LaunchAgent + JXA/AppleScript automation scripts
 └── music_curator.py  ← top-level launcher
@@ -17,6 +18,7 @@ music-curator/
 |---|---|---|
 | [`curator`](curator/) | Metadata enrichment, AI mood analysis, playlist org, dedup, curation | macOS + Music.app |
 | [`apple2spfy`](apple2spfy/) | Export/sync Apple Music playlists → Spotify | macOS |
+| [`spfy2apple`](spfy2apple/) | Sync Spotify followed playlists → Apple Music | macOS |
 | [`pitch2play`](pitch2play/) | Pitch detection → playlist routing | macOS |
 
 ## Quick start

@@ -1,0 +1,25 @@
+# spfy2apple — Playlist Filter
+#
+# Only Spotify playlists listed here will be synced to Apple Music.
+# One playlist name per line. Matching is case-insensitive and
+# Unicode-normalised, so you can write names in any case.
+# Lines starting with # are comments. Empty lines are ignored.
+#
+# If this file is empty or doesn't exist, ALL followed playlists are synced.
+#
+white sands
+what's new on because?
+intimate fonk
+rosa welle
+titelmelodien
+holiday maker fm
+mildlife's very fantastic playlist
+into the void
+lady bug
+mata la pena
+jungle spliff
+ballad of the spirits
+bamboo for two
+star sailor
+cheez tv
+the coconut pearl

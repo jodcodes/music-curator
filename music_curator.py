@@ -20,6 +20,11 @@ TOOLS = {
         ROOT / "apple2spfy",
         ["python3", "sync_playlists.py"],
     ),
+    "spfy2apple": (
+        "Spotify followed playlists → Apple Music sync",
+        ROOT / "spfy2apple",
+        ["python3", "sync_from_spotify.py"],
+    ),
     "music-tools": (
         "alias for curator tools",
         ROOT / "curator",
