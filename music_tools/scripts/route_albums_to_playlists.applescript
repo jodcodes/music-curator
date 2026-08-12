@@ -1,42 +1,20 @@
--- Mapping von Albumname → Playlistname
-property albumPlaylistMap : {¬
-	{"DeepDubMinimal", "DeepDubMinimal"}, ¬
-	{"Detroit/Chicago/NYGarage", "Detroit/Chicago/NYGarage"}, ¬
-	{"Español&Portguês", "Español&Português"}, ¬
-	{"HardGroove&Rave", "HardGroove&Rave"}, ¬
-	{"Hip-Hop", "Hip-Hop"}, ¬
-	{"House&Miscellaneous", "House&Miscellaneous"}, ¬
-	{"JazzyHouse", "Jazzy House"}, ¬
-	{"latin raptor core", "latin raptor housecore"}, ¬
-	{"Mixed", "Mixed"}, ¬
-	{"Nu Disco&Funky House", "Nu Disco&Funky House"}, ¬
-	{"Prog/Melodic House/Techno", "Prog/Melodic House/Techno"}, ¬
-	{"Reggae&Dub", "Reggae&Dub"}, ¬
-	{"Soul&Funk", "Soul&Funk"}, ¬
-	{"Synth&Micro House", "Synth&Micro House"}, ¬
-	{"World", "World"}, ¬
-	{"70sPursuit", "70s Pursuit"}, ¬
-	{"Acid", "Acid"}, ¬
-	{"Disco&Funk", "Disco&Funk"}, ¬
-	{"EuroTrance&PopEdits", "EuroTrance&PopEdits"}, ¬
-	{"Française", "Française"}, ¬
-	{"Jazz", "Jazz"}, ¬
-	{"Ol' Skool House", "Ol' Skool House"}, ¬
-	{"Synth World", "Synth World"}, ¬
-	{"Voicy House", "Voicy House"}, ¬
-	{"World House/Techno", "World House/Techno"}, ¬
-	{"00s", "00s child"}, ¬
-	{"10s for the youth", "10s for the youth"}, ¬
-	{"60sPeace", "60sPeace"}, ¬
-	{"80s sind die alten 10s", "80s sind die alten 10s"}, ¬
-	{"90sRave", "90sRave"}, ¬
-	{"90s started lives", "90s started lives"}, ¬
-	{"Voicy Techno", "Voicy Techno"}, ¬
-	{"Trip-Hop", "Trip-Hop/IDM"}, ¬
-	{"Breaks,Jungle,DnB,UKG", "Breaks,Jungle,UKG"}, ¬
-	{"Español&Português", "Español&Português"}, ¬
-	{"Bass,Ghetto&TechHouse", "Bass,Ghetto&TechHouse"} ¬
-		}
+-- Mapping von Albumname → Playlistname – geladen aus shared JSON-Config
+-- (curator/data/config/album_playlist_map.json)
+set jsonPath to (POSIX path of (path to home folder)) & "own_repos/music-curator/curator/data/config/album_playlist_map.json"
+set mapOutput to do shell script "/usr/bin/python3 -c \"import json; [print(e['album']+'\\t'+e['playlist']) for e in json.load(open('" & jsonPath & "'))]\""
+set albumPlaylistMap to {}
+set oldDelims to AppleScript's text item delimiters
+set AppleScript's text item delimiters to return
+set mapLines to text items of mapOutput
+set AppleScript's text item delimiters to tab
+repeat with aLine in mapLines
+	if aLine is "" then
+		exit repeat
+	end if
+	set tabItems to text items of aLine
+	set end of albumPlaylistMap to {item 1 of tabItems, item 2 of tabItems}
+end repeat
+set AppleScript's text item delimiters to oldDelims
 
 -- Ordner bestimmen, in dem das Skript liegt
 set scriptFile to (path to me)

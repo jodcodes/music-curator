@@ -54,50 +54,39 @@ function quotedForm(s) {
 }
 
 // ============================================================
-// Genre-Klassifikation – 1:1-Port von affective_playlists
-// (src/curation_models.py -> normalize_fav_genre_label).
-// Hält die Fav-Songs-Genres in beiden Repos identisch.
+// Genre-Klassifikation – geladen aus shared JSON-Config
+// (curator/data/config/genre_groups.json).
+// Python (src/genre_groups.py) und JXA nutzen dieselbe Quelle.
 // Reihenfolge der Regeln ist relevant (erste Übereinstimmung gewinnt).
 // ============================================================
 
-// Entspricht _genre_search_text aus curation_models.py
+const GENRE_GROUPS_PATH = `${HOME}/own_repos/music-curator/curator/data/config/genre_groups.json`;
+
+function loadGenrePatterns() {
+	const nsStr = $.NSString.stringWithContentsOfFileEncodingError(GENRE_GROUPS_PATH, $.NSUTF8StringEncoding, null);
+	if (!nsStr) throw new Error(`Genre-Config nicht gefunden: ${GENRE_GROUPS_PATH}`);
+	return JSON.parse(nsStr.js);
+}
+
+// Einmal am Modul-Top-Level laden — alle Funktionen nutzen diese Instanz.
+const _GENRE_PATTERNS = loadGenrePatterns();
+
+// Entspricht _genre_search_text aus genre_groups.py
 function genreSearchText(genre) {
 	let t = genre.replace(/_/g, " ").replace(/-/g, " ").trim().toLowerCase();
 	return t.replace(/\s+/g, " ");
 }
 
-// Entspricht normalize_fav_genre_label aus curation_models.py
+// Entspricht canonical_genre_label aus genre_groups.py
 function genreCategory(genre) {
 	if (!genre) return "Sonstige";
 	const text = genreSearchText(genre);
 	if (!text) return "Sonstige";
 
-	if (/\bhouse\b/.test(text)) return "House";
-	if (/\btechno\b/.test(text)) return "Techno";
-	if (/\bbreakbeat\b|jungle|drum.n.bass/.test(text)) return "Breakbeat/Jungle";
-	if (/\bidm\b|experimental/.test(text)) return "IDM";
-	if (/trip hop|triphop/.test(text)) return "Trip-Hop";
-	if (/\bdisco\b/.test(text)) return "Disco";
-	if (/\bfunk\b/.test(text)) return "Funk";
-	if (/soul/.test(text)) return "Soul";
-	if (/\bjazz\b|fusion/.test(text)) return "Jazz";
-	if (/\bblues\b/.test(text)) return "Blues";
-	if (/\balt\b|alternative|indie|grunge|punk|new wave|psychedelic|psychedelisch|kraut|prog rock|art rock|british invasion|adult alternative/.test(text)) return "Alternative & Indie";
-	if (/classical|klassik|klassisch|neoclassical|baroque|barock/.test(text)) return "Classical";
-	if (/rock|metal|surf|hardcore/.test(text)) return "Rock";
-	if (/\bpop\b|lounge|easy listening|new age|christmas|inspirational|schlager|vocal/.test(text)) {
-		if (text.indexOf("lounge") !== -1) return "Lounge";
-		return "Pop";
+	for (const entry of _GENRE_PATTERNS) {
+		if (new RegExp(entry.pattern).test(text)) return entry.label;
 	}
-	if (/folk|singer|songwriter|country|traditional folk/.test(text)) return "Folk & Singer-Songwriter";
-	if (/ambient/.test(text)) return "Ambient";
-	if (/electro|electronica|dance|trance|downtempo|garage|bass|speed|deep|post club|rave|edm|fitness|workout/.test(text)) return "Electronic";
-	if (/hip|hop|rap|r&b|rnb|r & b|r and b|dope/.test(text)) return "Hip Hop & RnB";
-	if (/latin|latino|latina|pagode|tropical|baile|mpb|bossa|brazilian|brasilianisch|balada|bolero|rumba|mexicana|mexiko|south america|caribbean|karibik|urbano|reggae|dancehall|cuban|salsa|flamenco|samba/.test(text)) return "Latin & Brasileiro";
-	if (/afro|african|afrikanische|afrobeats|highlife|world|welt|turkish|halk|farsi|bollywood|j pop|kayokyoku|worldwide/.test(text)) return "African & World";
-	if (/soundtrack|soundtracks|score|originalfilm|tv soundtrack/.test(text)) return "Soundtrack";
 	if (text === "other" || text === "sonstige") return "Sonstige";
-
 	return "Sonstige";
 }
 
@@ -151,33 +140,10 @@ function run() {
 	log(`--- Sync gestartet: ${nowStr} ---`);
 
 	const PREFIX = "♥ ";
-	// Kategorien = Fav-Songs-Genres aus affective_playlists
-	// (curation_models.normalize_fav_genre_label). Reihenfolge = Anzeige.
-	const categories = [
-		"Pop",
-		"Lounge",
-		"Rock",
-		"Alternative & Indie",
-		"Folk & Singer-Songwriter",
-		"Hip Hop & RnB",
-		"Trip-Hop",
-		"Electronic",
-		"House",
-		"Techno",
-		"Breakbeat/Jungle",
-		"IDM",
-		"Ambient",
-		"Disco",
-		"Funk",
-		"Soul",
-		"Jazz",
-		"Blues",
-		"Classical",
-		"Latin & Brasileiro",
-		"African & World",
-		"Soundtrack",
-		"Sonstige"
-	];
+	// Kategorien aus der shared JSON-Config abgeleitet
+	// (Genre-Pattern-Reihenfolge + "Sonstige" am Ende).
+	const categories = _GENRE_PATTERNS.map(e => e.label);
+	categories.push("Sonstige");
 
 	// === Migration alter Playlist-Namen "♥ Faved – X" → "♥ X" ===
 	migrateFavedPrefix();
