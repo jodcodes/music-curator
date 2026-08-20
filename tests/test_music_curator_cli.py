@@ -10,6 +10,6 @@ def test_music_curator_lists_available_tools():
         check=True,
     )
 
-    assert "affective" in result.stdout
+    assert "curator" in result.stdout
     assert "apple2spfy" in result.stdout
     assert "music-tools" in result.stdout

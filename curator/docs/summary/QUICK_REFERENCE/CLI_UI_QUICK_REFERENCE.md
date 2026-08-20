@@ -1,6 +1,6 @@
 # CLI UI Quick Reference
 
-A fun and engaging command-line interface library for the affective_playlists project.
+A fun and engaging command-line interface library for the curator project.
 
 ## Overview
 

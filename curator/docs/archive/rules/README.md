@@ -1,6 +1,6 @@
 # Documentation & Development Rules
 
-This folder contains organizational rules and standards for the affective_playlists project.
+This folder contains organizational rules and standards for the curator project.
 
 ## Rules Overview
 

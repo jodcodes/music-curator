@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-✅ **affective_playlists is now production-ready for GitHub distribution.**
+✅ **curator is now production-ready for GitHub distribution.**
 
 Users can clone the repository and have a fully functional installation with a single command in ~5 minutes.
 
@@ -27,8 +27,8 @@ Features:
 
 **Usage**:
 ```bash
-git clone https://github.com/jodcodes/affective_playlists.git
-cd affective_playlists
+git clone https://github.com/jodcodes/music-curator.git
+cd curator
 bash install.sh
 ```
 
@@ -123,8 +123,8 @@ bash install.sh
 
 ### Installation Process (Under 5 Minutes)
 ```bash
-$ git clone https://github.com/jodcodes/affective_playlists.git
-$ cd affective_playlists
+$ git clone https://github.com/jodcodes/music-curator.git
+$ cd curator
 $ bash install.sh
 
 ✓ Python 3.12.0
@@ -137,16 +137,16 @@ $ bash install.sh
 Next Steps:
 1. vim .env
 2. source activate.sh
-3. affective-playlists
+3. curator
 ```
 
 ### Available Commands
 ```bash
 source activate.sh    # Activate environment
-affective-playlists   # Interactive menu
-affective-playlists temperament  # AI emotion analysis
-affective-playlists enrich       # Metadata enrichment
-affective-playlists organize     # Playlist organization
+curator   # Interactive menu
+curator temperament  # AI emotion analysis
+curator enrich       # Metadata enrichment
+curator organize     # Playlist organization
 ```
 
 ### Full Functionality
@@ -293,12 +293,12 @@ affective-playlists organize     # Playlist organization
 
 1. **Clone**
    ```bash
-   git clone https://github.com/jodcodes/affective_playlists.git
+   git clone https://github.com/jodcodes/music-curator.git
    ```
 
 2. **Install** (Single command)
    ```bash
-   cd affective_playlists
+   cd curator
    bash install.sh
    ```
 
@@ -311,7 +311,7 @@ affective-playlists organize     # Playlist organization
 4. **Run**
    ```bash
    source activate.sh
-   affective-playlists
+   curator
    ```
 
 ### For Developers
@@ -354,7 +354,7 @@ affective-playlists organize     # Playlist organization
 - Undo capability
 
 ### ✅ Shared Infrastructure
-- Unified CLI (`affective-playlists` command)
+- Unified CLI (`curator` command)
 - Configuration management
 - Centralized logging
 - Apple Music interface
@@ -430,7 +430,7 @@ affective-playlists organize     # Playlist organization
 
 **Status**: 🎉 **PRODUCTION READY**
 
-The affective_playlists project is fully prepared for GitHub distribution. Users can:
+The curator project is fully prepared for GitHub distribution. Users can:
 
 1. Clone the repository
 2. Run one command (`bash install.sh`)
@@ -443,7 +443,7 @@ The repository is ready to be published to GitHub.
 
 ---
 
-**Project**: affective_playlists v1.0.0  
+**Project**: curator v1.0.0  
 **Date**: January 4, 2026  
 **Status**: ✅ Production Ready  
 **Tests**: 136 passing  

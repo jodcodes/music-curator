@@ -32,9 +32,9 @@ Background Jobs provides asynchronous task processing for long-running operation
   - `CELERY_WORKER_CONCURRENCY` - Number of parallel worker processes (default: 2)
   - `CELERY_TASK_TIMEOUT` - Task execution timeout in seconds (default: 3600)
 - Celery task naming convention:
-  - `affective_playlists.tasks.enrichment:enrich_metadata`
-  - `affective_playlists.tasks.temperament:analyze_mood`
-  - `affective_playlists.tasks.organization:organize_playlists`
+  - `curator.tasks.enrichment:enrich_metadata`
+  - `curator.tasks.mood:analyze_mood`
+  - `curator.tasks.organization:organize_playlists`
 
 ### Related Domains
 
@@ -79,7 +79,7 @@ The system MUST accept and queue long-running operations asynchronously.
 - WHEN /api/enrichment/start is called
 - THEN system SHALL:
   - Create unique job_id (format: `enrichment-{timestamp}-{uuid}`)
-  - Submit task to Celery queue: `affective_playlists.tasks.enrichment:enrich_metadata`
+  - Submit task to Celery queue: `curator.tasks.enrichment:enrich_metadata`
   - Return immediately with 202 ACCEPTED status
   - Return response: `{"job_id": "enrichment-123...", "status": "queued", "track_count": N}`
 - AND database MUST persist job record with state="queued"
@@ -90,7 +90,7 @@ The system MUST accept and queue long-running operations asynchronously.
 - THEN system SHALL:
   - Parse and validate inputs
   - Create job with metadata: playlist_id, track_count
-  - Submit task: `affective_playlists.tasks.temperament:analyze_mood`
+  - Submit task: `curator.tasks.mood:analyze_mood`
   - Return 202 ACCEPTED with job_id
 
 #### Scenario: Task queue is full

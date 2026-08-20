@@ -1,4 +1,4 @@
-# affective_playlists - Unified Dependencies
+# curator - Unified Dependencies
 # Python 3.10+ required
 
 # Core dependencies

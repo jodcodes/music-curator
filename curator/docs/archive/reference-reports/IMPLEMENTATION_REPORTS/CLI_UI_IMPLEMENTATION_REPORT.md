@@ -6,7 +6,7 @@
 
 ## Overview
 
-Implemented a comprehensive CLI UI library (`cli_ui.py`) to provide fun, engaging command-line interactions for the affective_playlists project. This module brings colorful output, interactive menus, progress tracking, and professional formatting to the command-line interface.
+Implemented a comprehensive CLI UI library (`cli_ui.py`) to provide fun, engaging command-line interactions for the curator project. This module brings colorful output, interactive menus, progress tracking, and professional formatting to the command-line interface.
 
 ## Features Implemented
 

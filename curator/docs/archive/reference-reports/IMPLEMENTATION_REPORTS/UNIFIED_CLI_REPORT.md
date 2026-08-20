@@ -135,7 +135,7 @@ Enter your choice (1 or 2):
 
 ### Feature Selection
 ```
-🎵 affective_playlists - Unified Music Library Organization
+🎵 curator - Unified Music Library Organization
 
 Select a feature to run
 
@@ -376,7 +376,7 @@ These are acceptable limitations given the target platform (macOS) and use case 
 
 ## Conclusion
 
-Successfully completed full CLI UI integration across the affective_playlists application. The unified CLI provides a cohesive, engaging, and professional user experience across all features while maintaining 100% backwards compatibility.
+Successfully completed full CLI UI integration across the curator application. The unified CLI provides a cohesive, engaging, and professional user experience across all features while maintaining 100% backwards compatibility.
 
 All features now share:
 - Consistent color scheme

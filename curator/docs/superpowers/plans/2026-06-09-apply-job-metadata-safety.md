@@ -36,7 +36,7 @@
 
 - [ ] Write failing tests that `/api/curation/apply` creates a `JobStore` job and queues `apply_curation.apply_async()` after confirmation, mini-test, token, and snapshot gates pass.
 - [ ] Write a failing test that a queue failure does not consume the smoke-test token.
-- [ ] Add a Celery task named `affective_playlists.tasks.curation:apply_curation` that marks the job running, calls `CurationService().apply_fav_songs(confirmed=True)`, stores the result, and marks the job completed or failed.
+- [ ] Add a Celery task named `curator.tasks.curation:apply_curation` that marks the job running, calls `CurationService().apply_fav_songs(confirmed=True)`, stores the result, and marks the job completed or failed.
 - [ ] Update `/api/curation/apply` to return `202`, `{success: true, status: "queued", job_id}` only after job creation and queue submission succeed.
 - [ ] Keep direct full apply out of tests by mocking the Celery task and `CurationService`.
 - [ ] Run targeted curation/background tests and the full suite.

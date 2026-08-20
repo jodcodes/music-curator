@@ -4,7 +4,7 @@
 
 ### Option 1: Run All 31 Unit Tests
 ```bash
-cd /Users/joeldebeljak/own_repos/affective_playlists
+cd /Users/joeldebeljak/own_repos/curator
 python3 -m unittest tests.test_metadata_enrichment -v
 ```
 
@@ -65,7 +65,7 @@ python3 main.py
 
 ### Step 2: Select Metadata Enrichment
 ```
-affective_playlists - Unified Music Library Organization
+curator - Unified Music Library Organization
 ======================================================================
 
 Select a feature to run:
@@ -233,7 +233,7 @@ python3 main.py
 **Cause**: Python path not set correctly  
 **Solution**:
 ```bash
-export PYTHONPATH=/Users/joeldebeljak/own_repos/affective_playlists:$PYTHONPATH
+export PYTHONPATH=/Users/joeldebeljak/own_repos/curator:$PYTHONPATH
 python3 -m unittest tests.test_metadata_enrichment -v
 ```
 

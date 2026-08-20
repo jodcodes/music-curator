@@ -4,7 +4,7 @@ This folder contains legacy spec documents from the brownfield migration phase. 
 
 ## Why These Exist
 
-The affective_playlists project uses a spec-driven brownfield workflow (see [AGENTS.md](../../AGENTS.md)). During the migration phase, existing documentation was seeded into the system. Legacy specs here served as inputs for creating the authoritative OpenSpec specifications.
+The curator project uses a spec-driven brownfield workflow (see [AGENTS.md](../../AGENTS.md)). During the migration phase, existing documentation was seeded into the system. Legacy specs here served as inputs for creating the authoritative OpenSpec specifications.
 
 ## Current Source of Truth
 
@@ -51,7 +51,7 @@ The affective_playlists project uses a spec-driven brownfield workflow (see [AGE
 - [Architecture Guide](../architecture/) — Current system design
 - [OpenSpec](../../openspec/) — Source of truth for all specs
 
-This folder contains all functional specifications and technical requirements for the affective_playlists system.
+This folder contains all functional specifications and technical requirements for the curator system.
 
 ## Functional Specifications
 

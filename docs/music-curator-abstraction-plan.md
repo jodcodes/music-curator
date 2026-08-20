@@ -5,18 +5,18 @@ Goal: keep the family of music tools coherent without over-abstracting the worki
 ## 1. Repo Boundary
 
 - Keep one top-level family name: `music-curator`.
-- Treat `affective_playlists` as the main product repo surface.
+- Treat `curator` as the main product repo surface.
 - Keep `apple2spfy` separate.
-- Keep `music_tools` as bundled commands inside `affective_playlists`, not a separate product boundary.
+- Keep `music_tools` as bundled commands inside `curator`, not a separate product boundary.
 - Move shared code only when at least two feature areas use it.
 
 Suggested target layout:
 
 ```text
 music-curator/
-  affective_playlists/
+  curator/
   apple2spfy/
-  music_tools/   # bundled through affective_playlists tools
+  music_tools/   # bundled through curator tools
   docs/
   tests/
   README.md
@@ -38,9 +38,9 @@ Do not move feature-specific behavior into core. Core should be boring plumbing.
 
 Keep features as thin, independent services:
 
-- `affective_playlists` — temperament, Fav Songs curation, metadata enrichment, playlist organization, and bundled maintenance commands
+- `curator` — mood, Fav Songs curation, metadata enrichment, playlist organization, and bundled maintenance commands
 - `apple2spfy` — playlist sync/export/cache
-- `music_tools` — operational scripts invoked through the `affective_playlists tools` command group
+- `music_tools` — operational scripts invoked through the `curator tools` command group
 
 Each feature should expose:
 
@@ -58,7 +58,7 @@ Each feature should expose:
   - API provider choices
   - safety limits for apply operations
 
-Current genre grouping now starts in `affective_playlists/src/genre_groups.py`; later promote it to shared core only if `apple2spfy` or scripts also need it.
+Current genre grouping now starts in `curator/src/genre_groups.py`; later promote it to shared core only if `apple2spfy` or scripts also need it.
 
 ## 5. Public GitHub Cleanup
 
@@ -75,14 +75,14 @@ Before publishing:
 
 Start small:
 
-- `python -m pytest affective_playlists/tests/test_curation_models.py affective_playlists/tests/test_curation_service.py affective_playlists/tests/test_apple_music_structure.py -q`
+- `python -m pytest curator/tests/test_curation_models.py curator/tests/test_curation_service.py curator/tests/test_apple_music_structure.py -q`
 - Add GitHub Actions only for tests that do not require macOS Music.app access.
 - Mark live Apple Music tests as manual/integration.
 
 ## 7. Migration Order
 
 1. Add top-level README, LICENSE, `.gitignore`, and publish-safe `.env.example`.
-2. Keep current folders, but expose the merged `affective_playlists` command surface consistently.
+2. Keep current folders, but expose the merged `curator` command surface consistently.
 3. Centralize duplicated config/utilities only when touched by active work.
 4. Introduce `pyproject.toml` and one CLI entrypoint.
 5. Move to a package/workspace layout only if packaging or imports require it.

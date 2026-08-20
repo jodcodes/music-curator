@@ -79,7 +79,7 @@ def check_dependencies():
 def show_menu():
     """Show deployment options."""
     print("\n" + "=" * 70)
-    print("AFFECTIVE_PLAYLISTS - LOCAL DEPLOYMENT")
+    print("CURATOR - LOCAL DEPLOYMENT")
     print("=" * 70)
     print("\nSelect how to run:")
     print("  1) Flask web server ONLY (no background jobs)")

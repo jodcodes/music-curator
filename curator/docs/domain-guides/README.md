@@ -12,7 +12,7 @@ For authoritative specifications with implementation context, see:
 
 ## Historical Reference
 
-Domain-specific guides for each major feature area of affective_playlists.
+Domain-specific guides for each major feature area of curator.
 
 Each domain guide provided:
 - Overview and core features

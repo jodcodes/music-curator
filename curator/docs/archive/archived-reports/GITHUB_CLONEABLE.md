@@ -2,7 +2,7 @@
 
 ## Status: ✅ Production Ready
 
-The affective_playlists project is now fully set up for GitHub distribution with single-command installation.
+The curator project is now fully set up for GitHub distribution with single-command installation.
 
 ---
 
@@ -11,8 +11,8 @@ The affective_playlists project is now fully set up for GitHub distribution with
 ### Clone and Install
 
 ```bash
-git clone https://github.com/jodcodes/affective_playlists.git
-cd affective_playlists
+git clone https://github.com/jodcodes/music-curator.git
+cd curator
 bash install.sh
 ```
 
@@ -43,7 +43,7 @@ That's it! The `install.sh` script:
 
 3. **Run the app:**
    ```bash
-   affective-playlists
+   curator
    ```
 
 ---
@@ -97,8 +97,8 @@ That's it! The `install.sh` script:
 
 ### CLI Commands
 After installation, two commands are available:
-- `affective-playlists` (primary)
-- `affective_playlists` (alternative)
+- `curator` (primary)
+- `curator` (alternative)
 
 Both work from anywhere after `source activate.sh`
 
@@ -138,7 +138,7 @@ Both work from anywhere after `source activate.sh`
 
 4. **Package Installation**
    ```bash
-   Installing affective_playlists in development mode...
+   Installing curator in development mode...
    ✓ Package installed
    ```
 
@@ -165,34 +165,34 @@ Both work from anywhere after `source activate.sh`
 source activate.sh
 
 # Show version
-affective-playlists --version
+curator --version
 
 # Show help
-affective-playlists --help
+curator --help
 
 # Interactive menu
-affective-playlists
+curator
 ```
 
 ### Features
 ```bash
 # Temperament Analysis - AI emotion classification
-affective-playlists temperament
+curator temperament
 
 # Metadata Enrichment - Fill missing metadata
-affective-playlists enrich
+curator enrich
 
 # Playlist Organization - Sort by genre
-affective-playlists organize
+curator organize
 ```
 
 ### Options
 ```bash
 # Verbose output
-affective-playlists -v
+curator -v
 
 # With specific playlist
-affective-playlists enrich --playlist "My Playlist"
+curator enrich --playlist "My Playlist"
 ```
 
 ---
@@ -201,7 +201,7 @@ affective-playlists enrich --playlist "My Playlist"
 
 ### Root Directory
 ```
-affective_playlists/
+curator/
 ├── install.sh            ← RUN THIS FIRST
 ├── activate.sh           ← Source this in new terminals
 ├── main.py               ← CLI entry point
@@ -327,7 +327,7 @@ pytest tests/ --cov=src
 **Q: "bash: install.sh: command not found"**
 A: Make sure you're in the project directory:
 ```bash
-cd affective_playlists
+cd curator
 bash install.sh
 ```
 
@@ -349,11 +349,11 @@ bash install.sh
 
 ### Runtime Issues
 
-**Q: "affective-playlists: command not found"**
+**Q: "curator: command not found"**
 A: Activate the environment:
 ```bash
 source activate.sh
-affective-playlists
+curator
 ```
 
 **Q: "OPENAI_API_KEY not found"**
@@ -395,7 +395,7 @@ To completely remove:
 
 ```bash
 # Remove the directory
-rm -rf /path/to/affective_playlists
+rm -rf /path/to/curator
 
 # Or just deactivate
 source deactivate

@@ -176,7 +176,7 @@ The fields are shown in parentheses: `(year=2020, bpm=120, genre=Rock)`
 ## Log File Location
 
 ```
-affective_playlists/
+curator/
 ├── data/
 │   └── logs/
 │       ├── metadata_enrichment.log      (Current log)

@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-Metadata enrichment for the affective_playlists system has been successfully reviewed, tested, and validated to work according to specification. The module retrieves missing audio metadata (BPM, Genre, Year) from multiple databases and applies it to Apple Music tracks.
+Metadata enrichment for the curator system has been successfully reviewed, tested, and validated to work according to specification. The module retrieves missing audio metadata (BPM, Genre, Year) from multiple databases and applies it to Apple Music tracks.
 
 ### Key Achievements
 
@@ -503,7 +503,7 @@ The metadata enrichment module is **production-ready** with comprehensive test c
 
 ### Run All Tests
 ```bash
-cd /Users/joeldebeljak/own_repos/affective_playlists
+cd /Users/joeldebeljak/own_repos/curator
 python3 -m unittest tests.test_metadata_enrichment -v
 ```
 

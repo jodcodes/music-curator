@@ -1,6 +1,6 @@
 # Apple Music to Spotify Playlist Sync
 
-Part of the top-level `music-curator` repo. Keep this tool focused on Apple Music → Spotify sync/export. Do not depend on `affective_playlists` unless there is a concrete shared behavior worth extracting.
+Part of the top-level `music-curator` repo. Keep this tool focused on Apple Music → Spotify sync/export. Do not depend on `curator` unless there is a concrete shared behavior worth extracting.
 
 A Python tool that synchronizes playlists from Apple Music to Spotify using AppleScript and the Spotify Web API.
 

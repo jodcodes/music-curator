@@ -2,7 +2,7 @@
 
 ## Context & Implementation Guide
 
-CLI Interface provides an interactive command-line user experience for users to navigate between affective_playlists features (temperament analysis, metadata enrichment, playlist organization). The system features colored output, progress indicators, interactive menus, and input validation.
+CLI Interface provides an interactive command-line user experience for users to navigate between curator features (mood analysis, metadata enrichment, playlist organization). The system features colored output, progress indicators, interactive menus, and input validation.
 
 ### Core Features
 
@@ -36,7 +36,7 @@ CLI Interface provides an interactive command-line user experience for users to 
 ### Related Domains
 
 - **Metadata Enrichment** (`metadata`) - Enrichment operations trigger via CLI
-- **Temperament Analysis** (`temperament`) - Analysis operations via CLI
+- **Mood Analysis** (`mood`) - Analysis operations via CLI
 - **Playlist Organization** (`playlists`) - Organization operations via CLI
 - **Browser Frontend** - Alternative to CLI (users choose interface)
 
@@ -44,7 +44,7 @@ CLI Interface provides an interactive command-line user experience for users to 
 
 ## Overview
 
-CLI Interface SHALL provide an interactive, user-friendly command-line experience for accessing all affective_playlists features with clear feedback and confirmation workflows.
+CLI Interface SHALL provide an interactive, user-friendly command-line experience for accessing all curator features with clear feedback and confirmation workflows.
 
 ### Requirement: Main Menu Navigation
 The system MUST display an interactive menu at startup allowing users to select available features.
@@ -165,7 +165,7 @@ The system MUST detect non-macOS platform and guide users appropriately.
 
 #### Scenario: Non-macOS platform detection
 - GIVEN application runs on Windows or Linux
-- WHEN user selects temperament analysis or playlist organization
+- WHEN user selects mood analysis or playlist organization
 - THEN system SHALL:
   - Display platform-specific message
   - Explain why feature is unavailable (requires Music.app)

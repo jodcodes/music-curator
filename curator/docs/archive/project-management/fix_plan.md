@@ -21,7 +21,7 @@
   → User guidance: Clear error messages on non-macOS
 - [x] [docs-drift] Keep docs and repository links aligned with current owner and workflows
   → Fixed: Removed duplicate "Source of Truth" entries in docs/README.md
-  → Status: All links point to jodcodes/affective_playlists correcty
+  → Status: All links point to jodcodes/music-curator correcty
 
 ## Priority 3 (Medium)
 - [x] [spec-seed-apple-music] Seed Apple Music integration behavior spec

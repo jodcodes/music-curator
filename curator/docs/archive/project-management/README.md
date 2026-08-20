@@ -1,6 +1,6 @@
 # Project Management
 
-Operational planning documents and prioritization for affective_playlists development.
+Operational planning documents and prioritization for curator development.
 
 ## Active Planning Files
 

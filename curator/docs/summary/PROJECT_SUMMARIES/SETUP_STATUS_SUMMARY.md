@@ -6,7 +6,7 @@
 
 ---
 
-Your affective_playlists metadata enrichment system has been updated with enhanced capabilities:
+Your curator metadata enrichment system has been updated with enhanced capabilities:
 
 ## ✅ What Was Done
 

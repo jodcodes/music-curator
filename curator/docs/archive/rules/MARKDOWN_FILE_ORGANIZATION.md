@@ -2,7 +2,7 @@
 
 ## Overview
 
-All markdown documentation files in the affective_playlists project must follow a consistent organization structure and be properly categorized by their purpose.
+All markdown documentation files in the curator project must follow a consistent organization structure and be properly categorized by their purpose.
 
 ## Root-Level Markdown Files
 

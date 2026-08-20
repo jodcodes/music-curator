@@ -49,7 +49,7 @@ python main.py
 Output:
 ```
 ┌──────────────────────────────┐
-│   🎵 affective_playlists    │
+│   🎵 curator    │
 │  Unified Music Library Org   │
 └──────────────────────────────┘
 
@@ -324,7 +324,7 @@ Total: 52 tests passing, 0 failures
 
 ```python
 # Interactive menu
-print_header("🎵 affective_playlists", "Unified Music Library Organization")
+print_header("🎵 curator", "Unified Music Library Organization")
 
 # Feature selection
 features = [

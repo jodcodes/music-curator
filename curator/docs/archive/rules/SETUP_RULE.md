@@ -47,7 +47,7 @@ This script:
 After running activate.sh, you should see:
 
 ```
-✓ affective_playlists environment ready!
+✓ curator environment ready!
 
 Available commands:
   python main.py                      # Interactive menu

@@ -117,8 +117,8 @@ python -m pytest tests/test_metadata_fill.py -q   # targeted
 ## One-Command Installation
 
 ```bash
-git clone https://github.com/jodcodes/affective_playlists.git
-cd affective_playlists
+git clone https://github.com/jodcodes/music-curator.git
+cd curator
 bash install.sh
 ```
 
@@ -154,19 +154,19 @@ source activate.sh
 
 You should see:
 ```
-affective_playlists environment ready!
+curator environment ready!
 
 Available commands:
-  affective-playlists                 # Interactive menu
-  affective-playlists temperament     # AI-based Playlist Temperament Analysis
-  affective-playlists enrich          # Metadata Filling and Enrichment
-  affective-playlists organize        # Playlist Organization by Genre
+  curator                 # Interactive menu
+  curator mood     # AI-based Playlist Mood Analysis
+  curator enrich          # Metadata Filling and Enrichment
+  curator organize        # Playlist Organization by Genre
 ```
 
 ### 3. Run the App
 
 ```bash
-affective-playlists
+curator
 ```
 
 Choose from the interactive menu.
@@ -175,17 +175,17 @@ Choose from the interactive menu.
 
 ### Interactive Menu
 ```bash
-affective-playlists
+curator
 ```
 Select option from menu.
 
-### Temperament Analysis
+### Mood Analysis
 ```bash
 # Interactive prompt for playlist selection
-affective-playlists temperament
+curator mood
 
 # With verbose logging
-affective-playlists temperament -v
+curator mood -v
 ```
 
 Analyzes emotional tone of playlists using OpenAI GPT.
@@ -193,13 +193,13 @@ Analyzes emotional tone of playlists using OpenAI GPT.
 ### Metadata Enrichment
 ```bash
 # Interactive prompt
-affective-playlists enrich
+curator enrich
 
 # Specific playlist
-affective-playlists enrich --playlist "My Playlist"
+curator enrich --playlist "My Playlist"
 
 # Verbose mode
-affective-playlists enrich --playlist "My Playlist" -v
+curator enrich --playlist "My Playlist" -v
 ```
 
 Fills missing: BPM, Genre, Year, Cover Art
@@ -207,7 +207,7 @@ Fills missing: BPM, Genre, Year, Cover Art
 ### Playlist Organization
 ```bash
 # Interactive mode with confirmation
-affective-playlists organize
+curator organize
 ```
 
 Organizes playlists by genre (Hip-Hop, Jazz, Electronic, etc.)
@@ -262,32 +262,32 @@ Control which playlists to process in `data/config/whitelist.json`:
 source activate.sh
 
 # Then use any of these:
-affective-playlists                  # Interactive menu
-affective-playlists --help           # Show help
-affective-playlists --version        # Show version
-affective-playlists -v               # Verbose mode
+curator                  # Interactive menu
+curator --help           # Show help
+curator --version        # Show version
+curator -v               # Verbose mode
 
 # Or specific features:
-affective-playlists temperament
-affective-playlists enrich
-affective-playlists organize
+curator mood
+curator enrich
+curator organize
 ```
 
 ## File Locations
 
 - **Config**: `.env`
-- **Logs**: `data/logs/` or `temperament_analyzer.log`
+- **Logs**: `data/logs/` or `mood_analyzer.log`
 - **Cache**: `data/cache/`
 - **Whitelist**: `data/config/whitelist.json`
 - **Data**: `data/` (all application data)
 
 ## Troubleshooting
 
-### "affective-playlists: command not found"
+### "curator: command not found"
 ```bash
 # Activate environment first
 source activate.sh
-affective-playlists
+curator
 ```
 
 ### "OPENAI_API_KEY not found"
@@ -332,7 +332,7 @@ All 136+ tests should pass.
 1. ✅ Run `bash install.sh`
 2. ✅ Edit `.env` with API keys
 3. ✅ Run `source activate.sh`
-4. ✅ Run `affective-playlists`
+4. ✅ Run `curator`
 5. 📖 Read [README.md](README.md) for detailed info
 
 ---

@@ -1,7 +1,7 @@
 # Work Summary - January 4, 2026
 
 ## Overview
-Comprehensive improvements to code quality, bug fixes, and installation system for affective_playlists project.
+Comprehensive improvements to code quality, bug fixes, and installation system for curator project.
 
 ---
 
@@ -31,7 +31,7 @@ Comprehensive improvements to code quality, bug fixes, and installation system f
 ## 2. Dependency Management
 
 ### requirements.txt Updated
-- Changed project name: `plMetaTemp` → `affective_playlists`
+- Changed project name: `plMetaTemp` → `curator`
 - Promoted dev tools from "optional" to required:
   - pytest, pytest-cov, pylint, black, mypy, isort
 - Added missing: `openai>=1.0.0` (was implicit, now explicit)
@@ -41,7 +41,7 @@ Comprehensive improvements to code quality, bug fixes, and installation system f
 ### New Files Created
 1. **setup.py** - Traditional setuptools configuration
 2. **pyproject.toml** - Modern Python packaging (PEP 517)
-   - Entry points for CLI commands: `affective-playlists`, `affective_playlists`
+   - Entry points for CLI commands: `curator`, `curator`
    - Tool configuration for black, isort, mypy, pylint
    - Optional dev dependencies group
 
@@ -101,12 +101,12 @@ All tests pass ✓
 ## 4. Updated Installation Commands
 
 ### activate.sh
-- Updated help text to show new `affective-playlists` command
-- Shows both old (`python main.py`) and new (`affective-playlists`) options
+- Updated help text to show new `curator` command
+- Shows both old (`python main.py`) and new (`curator`) options
 
 ### QUICKSTART.md
 - Installation: `source activate.sh && pip install -e .`
-- Running: `affective-playlists` instead of `python main.py`
+- Running: `curator` instead of `python main.py`
 - Updated command examples throughout
 - Simplified 4-step process
 - Links to detailed `docs/INSTALLATION.md`
@@ -186,19 +186,19 @@ All tests pass ✓
 
 ### Installation
 ```bash
-cd /path/to/affective_playlists
+cd /path/to/curator
 source activate.sh
 pip install -e .
 ```
 
 ### Usage (from anywhere)
 ```bash
-affective-playlists              # Interactive menu
-affective-playlists temperament  # Run temperament analysis
-affective-playlists enrich       # Run metadata enrichment
-affective-playlists organize     # Run playlist organization
-affective-playlists --version    # Show version
-affective-playlists --help       # Show help
+curator              # Interactive menu
+curator temperament  # Run temperament analysis
+curator enrich       # Run metadata enrichment
+curator organize     # Run playlist organization
+curator --version    # Show version
+curator --help       # Show help
 ```
 
 ### Development

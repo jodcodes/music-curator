@@ -1,7 +1,7 @@
 # Technical Requirements: System Architecture
 
 ## Overview
-The affective_playlists system is a unified Python CLI application that combines three independent music analysis and organization tools into a single cohesive platform.
+The curator system is a unified Python CLI application that combines three independent music analysis and organization tools into a single cohesive platform.
 
 ## System Components
 

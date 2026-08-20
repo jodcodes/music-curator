@@ -7,7 +7,7 @@ High-level system design and technical infrastructure documentation.
 The project uses a clean **src-layout** package structure with proper Python packaging:
 
 ```
-affective_playlists/
+curator/
 ├── main.py                      # Application entrypoint (uses src.* imports)
 ├── pyproject.toml               # Package configuration (packages = ["src"])
 ├── src/
@@ -54,10 +54,10 @@ from src.config import load_centralized_whitelist
 
 ## Architecture Overview
 
-**affective_playlists** is a unified Python CLI application combining three feature domains:
+**curator** is a unified Python CLI application combining three feature domains:
 
 ```
-affective_playlists (CLI entrypoint)
+curator (CLI entrypoint)
   ├── 4tempers (temperament analysis)
   ├── metad_enr (metadata enrichment)
   └── plsort (playlist organization)

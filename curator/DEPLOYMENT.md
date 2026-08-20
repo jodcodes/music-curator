@@ -1,6 +1,6 @@
 # 🚀 Local Development & Deployment Guide
 
-Complete setup for running **affective_playlists** with all production-ready features locally.
+Complete setup for running **curator** with all production-ready features locally.
 
 ## ✨ Features Included
 
@@ -33,7 +33,7 @@ Complete setup for running **affective_playlists** with all production-ready fea
 
 ```bash
 # Clone/navigate to project
-cd affective_playlists
+cd curator
 
 # Install Python dependencies
 pip install -r requirements.txt
@@ -198,7 +198,7 @@ curl -N http://127.0.0.1:4000/api/jobs/enrichment-1741608660-abc123/stream
 
 Automatically created at project root:
 ```
-affective_playlists/
+curator/
   jobs.db  ← Database file
 ```
 
@@ -225,7 +225,7 @@ sqlite> SELECT id, status, progress FROM jobs;
 
 ```bash
 # Set environment variable
-export DATABASE_URL=postgresql://user:password@localhost/affective_playlists
+export DATABASE_URL=postgresql://user:password@localhost/curator
 
 # Restart Flask server
 python run_local.py
@@ -440,7 +440,7 @@ find . -type d -name '__pycache__' -exec rm -r {} +
 ## 🎓 Project Structure
 
 ```
-affective_playlists/
+curator/
 ├── src/
 │   ├── web_server.py          # Flask app
 │   ├── celery_app.py          # Celery configuration

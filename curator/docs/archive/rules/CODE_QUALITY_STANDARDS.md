@@ -1,6 +1,6 @@
 # Code Quality Standards - Python Development
 
-This document establishes quality standards for all Python code in the affective_playlists project.
+This document establishes quality standards for all Python code in the curator project.
 
 ## Type Hints
 

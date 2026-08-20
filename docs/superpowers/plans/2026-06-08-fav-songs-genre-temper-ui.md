@@ -4,7 +4,7 @@
 
 **Goal:** Build a web UI that previews genre and temperament assignments, lets Joel correct them, and applies confirmed changes to Apple Music, including a separate `Fav Songs / <Genre> / Fav <Genre> <Temper>` structure.
 
-**Architecture:** Add a small curation layer inside `affective_playlists` that produces reviewable assignments and dry-run change plans before Apple Music is touched. The Flask API and static frontend consume that curation layer; `music_tools/bin/run_all.sh` later calls the same curation code for scheduled Favourite Songs syncing. Apple Music write operations stay behind a focused `osascript`/JXA adapter so tests can verify planning without launching Music.app.
+**Architecture:** Add a small curation layer inside `curator` that produces reviewable assignments and dry-run change plans before Apple Music is touched. The Flask API and static frontend consume that curation layer; `music_tools/bin/run_all.sh` later calls the same curation code for scheduled Favourite Songs syncing. Apple Music write operations stay behind a focused `osascript`/JXA adapter so tests can verify planning without launching Music.app.
 
 **Tech Stack:** Python 3.10, Flask, SQLAlchemy only where already used, static HTML/CSS/JS, JXA through `osascript -l JavaScript`, existing `PlaylistClassifier`, existing temperament classes, existing `music_tools` launchd wrapper.
 
@@ -12,22 +12,22 @@
 
 ## File Structure
 
-- Create `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/curation_models.py` for assignment dataclasses, enums, and naming helpers.
-- Create `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/curation_store.py` for persisted manual overrides in `data/curation/assignments.json`.
-- Create `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/apple_music_structure.py` for dry-run and apply operations against Music.app.
-- Create `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/curation_service.py` for orchestration across playlist classification, favourite track classification, overrides, and Apple Music apply.
-- Create `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/scripts/curation_structure.js` as a JXA `osascript -l JavaScript` adapter for folder, nested folder, playlist, move, and duplicate operations not covered by existing scripts.
-- Modify `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/web_server.py` to expose curation preview, override, dry-run, and apply endpoints.
-- Modify `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/web/index.html`, `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/web/static/js/app.js`, and `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/web/static/css/style.css` to add the review UI.
-- Modify `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/main.py` to add a `curate` CLI entry for scheduled Favourite Songs sync.
+- Create `/Users/joeldebeljak/own_repos/music-curator/curator/src/curation_models.py` for assignment dataclasses, enums, and naming helpers.
+- Create `/Users/joeldebeljak/own_repos/music-curator/curator/src/curation_store.py` for persisted manual overrides in `data/curation/assignments.json`.
+- Create `/Users/joeldebeljak/own_repos/music-curator/curator/src/apple_music_structure.py` for dry-run and apply operations against Music.app.
+- Create `/Users/joeldebeljak/own_repos/music-curator/curator/src/curation_service.py` for orchestration across playlist classification, favourite track classification, overrides, and Apple Music apply.
+- Create `/Users/joeldebeljak/own_repos/music-curator/curator/src/scripts/curation_structure.js` as a JXA `osascript -l JavaScript` adapter for folder, nested folder, playlist, move, and duplicate operations not covered by existing scripts.
+- Modify `/Users/joeldebeljak/own_repos/music-curator/curator/src/web_server.py` to expose curation preview, override, dry-run, and apply endpoints.
+- Modify `/Users/joeldebeljak/own_repos/music-curator/curator/web/index.html`, `/Users/joeldebeljak/own_repos/music-curator/curator/web/static/js/app.js`, and `/Users/joeldebeljak/own_repos/music-curator/curator/web/static/css/style.css` to add the review UI.
+- Modify `/Users/joeldebeljak/own_repos/music-curator/curator/main.py` to add a `curate` CLI entry for scheduled Favourite Songs sync.
 - Modify `/Users/joeldebeljak/own_repos/music-curator/music_tools/bin/run_all.sh` after the UI workflow is passing, so the scheduled automation calls the new curation CLI instead of the old genre-only script.
 - Create tests:
-  - `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_curation_models.py`
-  - `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_curation_store.py`
-  - `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_apple_music_structure.py`
-  - `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_curation_service.py`
-  - Extend `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_web_server.py`
-  - Extend `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_main_cli_platform.py`
+  - `/Users/joeldebeljak/own_repos/music-curator/curator/tests/test_curation_models.py`
+  - `/Users/joeldebeljak/own_repos/music-curator/curator/tests/test_curation_store.py`
+  - `/Users/joeldebeljak/own_repos/music-curator/curator/tests/test_apple_music_structure.py`
+  - `/Users/joeldebeljak/own_repos/music-curator/curator/tests/test_curation_service.py`
+  - Extend `/Users/joeldebeljak/own_repos/music-curator/curator/tests/test_web_server.py`
+  - Extend `/Users/joeldebeljak/own_repos/music-curator/curator/tests/test_main_cli_platform.py`
 
 ## Domain Rules
 
@@ -46,13 +46,13 @@
 ### Task 1: Curation Models And Naming
 
 **Files:**
-- Create: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/curation_models.py`
-- Test: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_curation_models.py`
+- Create: `/Users/joeldebeljak/own_repos/music-curator/curator/src/curation_models.py`
+- Test: `/Users/joeldebeljak/own_repos/music-curator/curator/tests/test_curation_models.py`
 
 - [ ] **Step 1: Write failing model and naming tests**
 
 ```python
-# /Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_curation_models.py
+# /Users/joeldebeljak/own_repos/music-curator/curator/tests/test_curation_models.py
 from src.curation_models import (
     AssignmentSource,
     AssignmentType,
@@ -101,14 +101,14 @@ def test_assignment_serializes_for_api():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && pytest tests/test_curation_models.py -v`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && pytest tests/test_curation_models.py -v`
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'src.curation_models'`.
 
 - [ ] **Step 3: Add model implementation**
 
 ```python
-# /Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/curation_models.py
+# /Users/joeldebeljak/own_repos/music-curator/curator/src/curation_models.py
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -194,14 +194,14 @@ class CurationAssignment:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && pytest tests/test_curation_models.py -v`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && pytest tests/test_curation_models.py -v`
 
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists
+cd /Users/joeldebeljak/own_repos/music-curator/curator
 git add src/curation_models.py tests/test_curation_models.py
 git commit -m "feat: add curation assignment models"
 ```
@@ -211,13 +211,13 @@ git commit -m "feat: add curation assignment models"
 ### Task 2: Manual Override Store
 
 **Files:**
-- Create: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/curation_store.py`
-- Test: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_curation_store.py`
+- Create: `/Users/joeldebeljak/own_repos/music-curator/curator/src/curation_store.py`
+- Test: `/Users/joeldebeljak/own_repos/music-curator/curator/tests/test_curation_store.py`
 
 - [ ] **Step 1: Write failing persistence tests**
 
 ```python
-# /Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_curation_store.py
+# /Users/joeldebeljak/own_repos/music-curator/curator/tests/test_curation_store.py
 from src.curation_models import AssignmentSource, AssignmentType, CurationAssignment, TemperBucket
 from src.curation_store import CurationStore
 
@@ -270,14 +270,14 @@ def test_store_merges_overrides_over_auto_assignments(tmp_path):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && pytest tests/test_curation_store.py -v`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && pytest tests/test_curation_store.py -v`
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'src.curation_store'`.
 
 - [ ] **Step 3: Add JSON store**
 
 ```python
-# /Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/curation_store.py
+# /Users/joeldebeljak/own_repos/music-curator/curator/src/curation_store.py
 from __future__ import annotations
 
 import json
@@ -336,14 +336,14 @@ class CurationStore:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && pytest tests/test_curation_store.py tests/test_curation_models.py -v`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && pytest tests/test_curation_store.py tests/test_curation_models.py -v`
 
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists
+cd /Users/joeldebeljak/own_repos/music-curator/curator
 git add src/curation_store.py tests/test_curation_store.py
 git commit -m "feat: persist curation overrides"
 ```
@@ -353,13 +353,13 @@ git commit -m "feat: persist curation overrides"
 ### Task 3: Apple Music Structure Planner And Dry Run
 
 **Files:**
-- Create: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/apple_music_structure.py`
-- Test: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_apple_music_structure.py`
+- Create: `/Users/joeldebeljak/own_repos/music-curator/curator/src/apple_music_structure.py`
+- Test: `/Users/joeldebeljak/own_repos/music-curator/curator/tests/test_apple_music_structure.py`
 
 - [ ] **Step 1: Write failing dry-run tests**
 
 ```python
-# /Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_apple_music_structure.py
+# /Users/joeldebeljak/own_repos/music-curator/curator/tests/test_apple_music_structure.py
 from src.apple_music_structure import AppleMusicChange, AppleMusicStructurePlanner
 from src.curation_models import AssignmentSource, AssignmentType, CurationAssignment, TemperBucket
 
@@ -414,14 +414,14 @@ def test_plan_deduplicates_folder_and_playlist_changes():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && pytest tests/test_apple_music_structure.py -v`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && pytest tests/test_apple_music_structure.py -v`
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'src.apple_music_structure'`.
 
 - [ ] **Step 3: Add dry-run planner**
 
 ```python
-# /Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/apple_music_structure.py
+# /Users/joeldebeljak/own_repos/music-curator/curator/src/apple_music_structure.py
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -477,14 +477,14 @@ class AppleMusicStructurePlanner:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && pytest tests/test_apple_music_structure.py -v`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && pytest tests/test_apple_music_structure.py -v`
 
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists
+cd /Users/joeldebeljak/own_repos/music-curator/curator
 git add src/apple_music_structure.py tests/test_apple_music_structure.py
 git commit -m "feat: plan apple music curation changes"
 ```
@@ -494,13 +494,13 @@ git commit -m "feat: plan apple music curation changes"
 ### Task 4: JXA Apply Adapter
 
 **Files:**
-- Modify: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/apple_music_structure.py`
-- Create: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/scripts/curation_structure.js`
-- Test: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_apple_music_structure.py`
+- Modify: `/Users/joeldebeljak/own_repos/music-curator/curator/src/apple_music_structure.py`
+- Create: `/Users/joeldebeljak/own_repos/music-curator/curator/src/scripts/curation_structure.js`
+- Test: `/Users/joeldebeljak/own_repos/music-curator/curator/tests/test_apple_music_structure.py`
 
 - [ ] **Step 1: Add failing adapter tests with mocked subprocess**
 
-Append to `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_apple_music_structure.py`:
+Append to `/Users/joeldebeljak/own_repos/music-curator/curator/tests/test_apple_music_structure.py`:
 
 ```python
 from unittest.mock import patch
@@ -547,13 +547,13 @@ def test_applier_calls_jxa_for_confirmed_changes(mock_run, tmp_path):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && pytest tests/test_apple_music_structure.py -v`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && pytest tests/test_apple_music_structure.py -v`
 
 Expected: FAIL with `ImportError: cannot import name 'AppleMusicStructureApplier'`.
 
 - [ ] **Step 3: Add Python applier**
 
-Append to `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/apple_music_structure.py`:
+Append to `/Users/joeldebeljak/own_repos/music-curator/curator/src/apple_music_structure.py`:
 
 ```python
 import os
@@ -600,7 +600,7 @@ class AppleMusicStructureApplier:
 
 ```javascript
 #!/usr/bin/env osascript -l JavaScript
-// /Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/scripts/curation_structure.js
+// /Users/joeldebeljak/own_repos/music-curator/curator/src/scripts/curation_structure.js
 const Music = Application("Music");
 Music.includeStandardAdditions = true;
 try { Music.timeout = 600; } catch (e) {}
@@ -697,7 +697,7 @@ function run(argv) {
 
 - [ ] **Step 5: Run tests**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && pytest tests/test_apple_music_structure.py -v`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && pytest tests/test_apple_music_structure.py -v`
 
 Expected: PASS.
 
@@ -705,14 +705,14 @@ Expected: PASS.
 
 Skip this step until Joel confirms that the Apple Music library is connected.
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && osascript -l JavaScript src/scripts/curation_structure.js ensure_folder "Fav Songs"`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && osascript -l JavaScript src/scripts/curation_structure.js ensure_folder "Fav Songs"`
 
 Expected: stdout contains `SUCCESS` and Music.app has a `Fav Songs` folder. If Music.app creates the folder but JXA returns a wording variant, update the Python success check to accept exact stdout after observing it.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists
+cd /Users/joeldebeljak/own_repos/music-curator/curator
 git add src/apple_music_structure.py src/scripts/curation_structure.js tests/test_apple_music_structure.py
 git commit -m "feat: apply curation changes to music"
 ```
@@ -722,13 +722,13 @@ git commit -m "feat: apply curation changes to music"
 ### Task 5: Curation Service
 
 **Files:**
-- Create: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/curation_service.py`
-- Test: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_curation_service.py`
+- Create: `/Users/joeldebeljak/own_repos/music-curator/curator/src/curation_service.py`
+- Test: `/Users/joeldebeljak/own_repos/music-curator/curator/tests/test_curation_service.py`
 
 - [ ] **Step 1: Write failing service tests with fake inputs**
 
 ```python
-# /Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_curation_service.py
+# /Users/joeldebeljak/own_repos/music-curator/curator/tests/test_curation_service.py
 from src.curation_models import TemperBucket
 from src.curation_service import CurationService
 
@@ -762,14 +762,14 @@ def test_fav_preview_builds_assignments_and_changes():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && pytest tests/test_curation_service.py -v`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && pytest tests/test_curation_service.py -v`
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'src.curation_service'`.
 
 - [ ] **Step 3: Add service implementation**
 
 ```python
-# /Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/curation_service.py
+# /Users/joeldebeljak/own_repos/music-curator/curator/src/curation_service.py
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
@@ -846,7 +846,7 @@ class CurationService:
 
 - [ ] **Step 4: Add AppleMusicInterface method for Favourite Songs**
 
-Modify `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/apple_music.py` with:
+Modify `/Users/joeldebeljak/own_repos/music-curator/curator/src/apple_music.py` with:
 
 ```python
     def get_favourite_tracks(self) -> List[Dict]:
@@ -857,14 +857,14 @@ Modify `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/appl
 
 - [ ] **Step 5: Run focused tests**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && pytest tests/test_curation_service.py tests/test_apple_music_folder_structure.py -v`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && pytest tests/test_curation_service.py tests/test_apple_music_folder_structure.py -v`
 
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists
+cd /Users/joeldebeljak/own_repos/music-curator/curator
 git add src/curation_service.py src/apple_music.py tests/test_curation_service.py
 git commit -m "feat: preview favourite song curation"
 ```
@@ -874,12 +874,12 @@ git commit -m "feat: preview favourite song curation"
 ### Task 6: Flask API Endpoints
 
 **Files:**
-- Modify: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/web_server.py`
-- Modify test: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_web_server.py`
+- Modify: `/Users/joeldebeljak/own_repos/music-curator/curator/src/web_server.py`
+- Modify test: `/Users/joeldebeljak/own_repos/music-curator/curator/tests/test_web_server.py`
 
 - [ ] **Step 1: Add failing endpoint tests**
 
-Append to `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_web_server.py`:
+Append to `/Users/joeldebeljak/own_repos/music-curator/curator/tests/test_web_server.py`:
 
 ```python
 class TestCurationEndpoints:
@@ -910,13 +910,13 @@ class TestCurationEndpoints:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && pytest tests/test_web_server.py::TestCurationEndpoints -v`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && pytest tests/test_web_server.py::TestCurationEndpoints -v`
 
 Expected: FAIL because routes do not exist.
 
 - [ ] **Step 3: Add service factory and routes**
 
-Add near the other helper factories in `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/src/web_server.py`:
+Add near the other helper factories in `/Users/joeldebeljak/own_repos/music-curator/curator/src/web_server.py`:
 
 ```python
 def _get_curation_service():
@@ -962,20 +962,20 @@ def curation_apply():
 
 - [ ] **Step 4: Run endpoint tests**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && pytest tests/test_web_server.py::TestCurationEndpoints -v`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && pytest tests/test_web_server.py::TestCurationEndpoints -v`
 
 Expected: PASS.
 
 - [ ] **Step 5: Run full web server tests**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && pytest tests/test_web_server.py -v`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && pytest tests/test_web_server.py -v`
 
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists
+cd /Users/joeldebeljak/own_repos/music-curator/curator
 git add src/web_server.py tests/test_web_server.py
 git commit -m "feat: expose curation review api"
 ```
@@ -985,13 +985,13 @@ git commit -m "feat: expose curation review api"
 ### Task 7: Static Web UI
 
 **Files:**
-- Modify: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/web/index.html`
-- Modify: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/web/static/js/app.js`
-- Modify: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/web/static/css/style.css`
+- Modify: `/Users/joeldebeljak/own_repos/music-curator/curator/web/index.html`
+- Modify: `/Users/joeldebeljak/own_repos/music-curator/curator/web/static/js/app.js`
+- Modify: `/Users/joeldebeljak/own_repos/music-curator/curator/web/static/css/style.css`
 
 - [ ] **Step 1: Add UI shell**
 
-In `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/web/index.html`, add a nav item and a view section:
+In `/Users/joeldebeljak/own_repos/music-curator/curator/web/index.html`, add a nav item and a view section:
 
 ```html
 <button class="nav-link" data-view="curation">Curation Review</button>
@@ -1016,7 +1016,7 @@ In `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/web/index.ht
 
 - [ ] **Step 2: Add frontend API and rendering functions**
 
-Append to `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/web/static/js/app.js`:
+Append to `/Users/joeldebeljak/own_repos/music-curator/curator/web/static/js/app.js`:
 
 ```javascript
 let curationPreview = null;
@@ -1112,7 +1112,7 @@ async function applyFavSongsCuration() {
 
 - [ ] **Step 3: Wire buttons in `setupEventListeners()`**
 
-Add inside existing `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/web/static/js/app.js` `setupEventListeners()`:
+Add inside existing `/Users/joeldebeljak/own_repos/music-curator/curator/web/static/js/app.js` `setupEventListeners()`:
 
 ```javascript
 const curationRefreshBtn = document.getElementById('curation-refresh-btn');
@@ -1127,7 +1127,7 @@ if (curationApplyBtn) curationApplyBtn.addEventListener('click', applyFavSongsCu
 
 - [ ] **Step 4: Add CSS**
 
-Append to `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/web/static/css/style.css`:
+Append to `/Users/joeldebeljak/own_repos/music-curator/curator/web/static/css/style.css`:
 
 ```css
 .curation-layout {
@@ -1196,7 +1196,7 @@ Append to `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/web/s
 
 - [ ] **Step 5: Run server and manually verify UI**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && python -m src.web_server`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && python -m src.web_server`
 
 Open: `http://127.0.0.1:4000`
 
@@ -1205,7 +1205,7 @@ Expected: `Curation Review` appears in navigation; clicking `Refresh Preview` ca
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists
+cd /Users/joeldebeljak/own_repos/music-curator/curator
 git add web/index.html web/static/js/app.js web/static/css/style.css
 git commit -m "feat: add curation review ui"
 ```
@@ -1215,12 +1215,12 @@ git commit -m "feat: add curation review ui"
 ### Task 8: CLI Entry For Scheduled Favourite Songs Sync
 
 **Files:**
-- Modify: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/main.py`
-- Test: `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_main_cli_platform.py`
+- Modify: `/Users/joeldebeljak/own_repos/music-curator/curator/main.py`
+- Test: `/Users/joeldebeljak/own_repos/music-curator/curator/tests/test_main_cli_platform.py`
 
 - [ ] **Step 1: Add failing CLI parser test**
 
-Append to `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/tests/test_main_cli_platform.py`:
+Append to `/Users/joeldebeljak/own_repos/music-curator/curator/tests/test_main_cli_platform.py`:
 
 ```python
 def test_curate_feature_accepts_dry_run(monkeypatch):
@@ -1242,13 +1242,13 @@ def test_curate_feature_accepts_dry_run(monkeypatch):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && pytest tests/test_main_cli_platform.py::test_curate_feature_accepts_dry_run -v`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && pytest tests/test_main_cli_platform.py::test_curate_feature_accepts_dry_run -v`
 
 Expected: FAIL because `main.main()` currently does not accept an argument list and `curate` is not a valid choice.
 
 - [ ] **Step 3: Update `main.py` parser and curation command**
 
-Modify `/Users/joeldebeljak/own_repos/music-curator/affective_playlists/main.py`:
+Modify `/Users/joeldebeljak/own_repos/music-curator/curator/main.py`:
 
 ```python
 def run_curation(args=None):
@@ -1275,7 +1275,7 @@ def run_curation(args=None):
 def main(argv=None):
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        prog="affective_playlists",
+        prog="curator",
         description="Unified music analysis and organization tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
@@ -1310,20 +1310,20 @@ def main(argv=None):
 
 - [ ] **Step 4: Run CLI tests**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && pytest tests/test_main_cli_platform.py -v`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && pytest tests/test_main_cli_platform.py -v`
 
 Expected: PASS.
 
 - [ ] **Step 5: Manual CLI dry-run**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && python main.py curate --scope fav_songs`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && python main.py curate --scope fav_songs`
 
 Expected: Prints Favourite track count and planned change count without modifying Apple Music.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists
+cd /Users/joeldebeljak/own_repos/music-curator/curator
 git add main.py tests/test_main_cli_platform.py
 git commit -m "feat: add curation cli"
 ```
@@ -1341,16 +1341,16 @@ git commit -m "feat: add curation cli"
 Modify `/Users/joeldebeljak/own_repos/music-curator/music_tools/bin/run_all.sh` after `export MUSIC_TOOLS_LIBRARY_PATH="$MUSIC_LIBRARY_PATH"`:
 
 ```bash
-AFFECTIVE_PLAYLISTS_DIR="$(cd "$REPO_DIR/../affective_playlists" && pwd)"
-AFFECTIVE_PLAYLISTS_CMD=(/usr/bin/env python3 "$AFFECTIVE_PLAYLISTS_DIR/main.py" curate --scope fav_songs)
+CURATOR_DIR="$(cd "$REPO_DIR/../curator" && pwd)"
+CURATOR_CMD=(/usr/bin/env python3 "$CURATOR_DIR/main.py" curate --scope fav_songs)
 ```
 
 Modify the scripts loop so `sort_favourites_by_genre.js` stays active until the new CLI has completed one successful dry-run:
 
 ```bash
-if [ -d "$AFFECTIVE_PLAYLISTS_DIR" ]; then
-    log "→ affective_playlists curate --scope fav_songs"
-    (cd "$AFFECTIVE_PLAYLISTS_DIR" && "${AFFECTIVE_PLAYLISTS_CMD[@]}") >> "$LOG_DIR/curate_fav_songs.log" 2>> "$LOG_DIR/curate_fav_songs.err.log" || OVERALL_RC=$?
+if [ -d "$CURATOR_DIR" ]; then
+    log "→ curator curate --scope fav_songs"
+    (cd "$CURATOR_DIR" && "${CURATOR_CMD[@]}") >> "$LOG_DIR/curate_fav_songs.log" 2>> "$LOG_DIR/curate_fav_songs.err.log" || OVERALL_RC=$?
 fi
 ```
 
@@ -1377,7 +1377,7 @@ for s in "$SCRIPTS_DIR/route_albums_to_playlists.applescript" "$SCRIPTS_DIR/find
 Then change the curation command to apply:
 
 ```bash
-AFFECTIVE_PLAYLISTS_CMD=(/usr/bin/env python3 "$AFFECTIVE_PLAYLISTS_DIR/main.py" curate --scope fav_songs --apply)
+CURATOR_CMD=(/usr/bin/env python3 "$CURATOR_DIR/main.py" curate --scope fav_songs --apply)
 ```
 
 - [ ] **Step 4: Update README**
@@ -1385,7 +1385,7 @@ AFFECTIVE_PLAYLISTS_CMD=(/usr/bin/env python3 "$AFFECTIVE_PLAYLISTS_DIR/main.py"
 Replace the `sort_favourites_by_genre.js` row in `/Users/joeldebeljak/own_repos/music-curator/music_tools/README.md` with:
 
 ```markdown
-| `../affective_playlists/main.py curate --scope fav_songs --apply` | Holt Tracks aus „Favourite Songs“ und sortiert sie in `Fav Songs / <Genre> / Fav <Genre> <Temper>` Playlists. Die gleiche Logik wird auch von der Web-UI verwendet. | im Wrapper |
+| `../curator/main.py curate --scope fav_songs --apply` | Holt Tracks aus „Favourite Songs“ und sortiert sie in `Fav Songs / <Genre> / Fav <Genre> <Temper>` Playlists. Die gleiche Logik wird auch von der Web-UI verwendet. | im Wrapper |
 ```
 
 - [ ] **Step 5: Commit inside the owning repo if initialized**
@@ -1412,7 +1412,7 @@ If `music_tools` is still not a Git repository, skip the commit and record the c
 Run:
 
 ```bash
-cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists
+cd /Users/joeldebeljak/own_repos/music-curator/curator
 pytest \
   tests/test_curation_models.py \
   tests/test_curation_store.py \
@@ -1427,13 +1427,13 @@ Expected: PASS.
 
 - [ ] **Step 2: Run full test suite**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && pytest tests/ -v`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && pytest tests/ -v`
 
 Expected: PASS. If tests unrelated to curation fail, document the failing test names and confirm they predate this work before merging.
 
 - [ ] **Step 3: Run web server and inspect UI**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && python -m src.web_server`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && python -m src.web_server`
 
 Open: `http://127.0.0.1:4000`
 
@@ -1445,13 +1445,13 @@ Expected:
 
 - [ ] **Step 4: Run Apple Music dry-run CLI**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && python main.py curate --scope fav_songs`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && python main.py curate --scope fav_songs`
 
 Expected: Prints planned assignment and change counts; no Apple Music writes.
 
 - [ ] **Step 5: Run Apple Music apply only after reviewing dry-run**
 
-Run: `cd /Users/joeldebeljak/own_repos/music-curator/affective_playlists && python main.py curate --scope fav_songs --apply`
+Run: `cd /Users/joeldebeljak/own_repos/music-curator/curator && python main.py curate --scope fav_songs --apply`
 
 Expected:
 - Folder `Fav Songs` exists.

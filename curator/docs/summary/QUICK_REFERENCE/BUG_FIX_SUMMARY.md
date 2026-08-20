@@ -10,7 +10,7 @@ When running `python main.py` interactively, the Menu.select() function in cli_u
 
 ```
 KeyError: 'len(options)'
-  File "/Users/joeldebeljak/own_repos/affective_playlists/src/cli_ui.py", line 321, in select
+  File "/Users/joeldebeljak/own_repos/curator/src/cli_ui.py", line 321, in select
     choice = input(f"{colorize('Choose option [1-{len(options)}]: '.format(len=len(options)), Color.BRIGHT_CYAN)}")
 ```
 

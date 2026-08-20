@@ -79,14 +79,14 @@ Core endpoints for frontend communication:
 
 - **Playlists** (`playlists`) - Classification and organization logic
 - **Metadata Enrichment** (`metadata`) - Track metadata operations
-- **Temperament Analysis** (`temperament`) - Mood classification
+- **Mood Analysis** (`mood`) - Mood classification
 - **LLM Client** (`llm_client`) - API provider abstractions
 
 ---
 
 ## Overview
 
-Browser Frontend SHALL provide lightweight web-based interface for all affective_playlists operations with real-time feedback, clear workflows, and persistent user preferences.
+Browser Frontend SHALL provide lightweight web-based interface for all curator operations with real-time feedback, clear workflows, and persistent user preferences.
 
 ### Requirement: Server Startup
 The system MUST start web server on loopback with predictable port.

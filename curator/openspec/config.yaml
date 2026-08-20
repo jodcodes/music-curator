@@ -1,6 +1,6 @@
 schema: spec-driven
 project:
-  name: affective_playlists
+  name: curator
   language: python
   type: brownfield
 context: |

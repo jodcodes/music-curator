@@ -1,4 +1,4 @@
-# Contributing to affective_playlists
+# Contributing to curator
 
 Thank you for your interest in contributing! This document provides guidelines and instructions for contributing to the project.
 
@@ -13,8 +13,8 @@ Thank you for your interest in contributing! This document provides guidelines a
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/jodcodes/affective_playlists.git
-   cd affective_playlists
+   git clone https://github.com/jodcodes/music-curator.git
+   cd curator
    ```
 
 2. **Create a virtual environment**

@@ -162,7 +162,7 @@ curator/docs/
 ├── domain-guides/
 │   ├── metadata/            enrichment pipeline details
 │   ├── playlists/           playlist management concepts
-│   └── temperament/         mood classification internals
+│   └── mood/               mood classification internals
 └── archive/                 legacy specs and reports
 ```
 
@@ -173,7 +173,7 @@ A powerful, single-command music tool that combines three complementary features
 
 ## Features
 
-- **Temperament Analysis** - AI-powered playlist emotion classification (Woe, Frolic, Dread, Malice)
+- **Mood Analysis** - AI-powered playlist emotion classification (Woe, Frolic, Dread, Malice)
 - **Metadata Enrichment** - Automatic metadata filling (BPM, Genre, Year, Cover Art) from multiple sources
 - **Playlist Organization** - Intelligent genre-based playlist classification and organization
 - **Music Tools** - Duplicate cleanup, genre cleanup, and favorite-song sorting helpers
@@ -185,8 +185,8 @@ A powerful, single-command music tool that combines three complementary features
 Clone and install in one command:
 
 ```bash
-git clone https://github.com/jodcodes/affective_playlists.git
-cd affective_playlists
+git clone https://github.com/jodcodes/music-curator.git
+cd curator
 bash install.sh
 ```
 
@@ -204,7 +204,7 @@ That's it! The script will:
    ```bash
    vim .env
    ```
-   Add your OpenAI API key (required for temperament analysis):
+   Add your OpenAI API key (required for mood analysis):
    ```
    OPENAI_API_KEY=sk-your-key
    ```
@@ -229,18 +229,18 @@ That's it! The script will:
 
 3. **Run the app**:
    ```bash
-   affective-playlists
+   curator
    ```
 
 ## Usage
 
 ### Interactive Menu (Recommended)
 ```bash
-affective-playlists
+curator
 ```
 
 Choose from:
-1. **Temperament Analysis** - AI-based emotion classification
+1. **Mood Analysis** - AI-based emotion classification
 2. **Metadata Enrichment** - Fill missing audio metadata
 3. **Playlist Organization** - Genre-based sorting
 4. **Music Tools** - Playlist cleanup and genre maintenance
@@ -249,35 +249,35 @@ Choose from:
 
 ```bash
 # Show interactive menu
-affective-playlists
+curator
 
-# Run temperament analysis
-affective-playlists temperament
+# Run mood analysis
+curator mood
 
 # Fill metadata for a playlist
-affective-playlists enrich --playlist "My Playlist"
+curator enrich --playlist "My Playlist"
 
 # Organize playlists by genre
-affective-playlists organize
+curator organize
 
 # Run bundled music tools
-affective-playlists tools --list
-affective-playlists tools sort-favourites
+curator tools --list
+curator tools sort-favourites
 
 # Show help
-affective-playlists --help
+curator --help
 
 # Show version
-affective-playlists --version
+curator --version
 
 # Verbose output
-affective-playlists -v
+curator -v
 ```
 
 ## Project Structure
 
 ```
-affective_playlists/
+curator/
 ├── install.sh              ← ONE-COMMAND SETUP
 ├── activate.sh             ← Activate environment
 ├── main.py                 ← CLI entry point
@@ -289,7 +289,7 @@ affective_playlists/
 ├── .env.example            ← Environment template
 │
 ├── src/                    ← All source code
-│   ├── temperament_analyzer.py     ← Temperament Analysis
+│   ├── mood_analyzer.py     ← Mood Analysis
 │   ├── metadata_fill.py             ← Metadata Enrichment
 │   ├── plsort.py                    ← Playlist Organization
 │   ├── apple_music.py               ← Shared Apple Music interface
@@ -327,7 +327,7 @@ affective_playlists/
 
 ## Features Overview
 
-### 1. Temperament Analysis
+### 1. Mood Analysis
 
 Classifies playlists into emotional categories using AI:
 - **Woe** (Melancholic) - Sadness, loneliness, introspection
@@ -500,9 +500,9 @@ MIT License - See [LICENSE](LICENSE) for details
 Having issues?
 
 1. Check the relevant docs in `docs/`
-2. View logs in `data/logs/` or `temperament_analyzer.log`
+2. View logs in `data/logs/` or `mood_analyzer.log`
 3. Review configuration in `.env` and `data/config/`
-4. Run with verbose mode: `affective-playlists -v`
+4. Run with verbose mode: `curator -v`
 5. Run tests: `pytest tests/ -v`
 
 ---

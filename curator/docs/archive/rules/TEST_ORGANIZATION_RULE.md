@@ -2,7 +2,7 @@
 
 ## Overview
 
-All tests for the affective_playlists project must be organized in the `tests/` folder following a consistent structure and naming convention.
+All tests for the curator project must be organized in the `tests/` folder following a consistent structure and naming convention.
 
 ## Directory Structure
 
