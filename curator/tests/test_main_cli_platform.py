@@ -219,6 +219,29 @@ def test_curate_feature_accepts_smoke_test(monkeypatch):
     assert calls == {"scope": "fav_songs", "apply": False, "smoke_test": True}
 
 
+def test_localize_defaults_to_dry_run_and_all_playlists(monkeypatch):
+    import main
+
+    calls = {}
+
+    def fake_run_localize(args):
+        calls.update(apply=args.apply, playlist=args.playlist, report=args.report)
+        return 0
+
+    monkeypatch.setattr(main, "run_localize", fake_run_localize, raising=False)
+
+    assert main.main(["localize"]) == 0
+    assert calls == {"apply": False, "playlist": None, "report": "localize-report.json"}
+
+
+def test_run_localize_requires_macos_before_constructing_service(monkeypatch):
+    import main
+
+    monkeypatch.setattr(main, "IS_MACOS", False)
+
+    assert main.main(["localize"]) == 1
+
+
 def test_tools_feature_lists_bundled_scripts(monkeypatch, capsys):
     import main
 

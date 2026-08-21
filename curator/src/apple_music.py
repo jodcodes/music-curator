@@ -81,6 +81,73 @@ class AppleMusicInterface:
         except FileNotFoundError:
             raise FileNotFoundError(f"AppleScript template not found: {script_path}")
 
+    @staticmethod
+    def _escape_applescript_string(value: str) -> str:
+        """Escape a value for interpolation into an AppleScript string literal."""
+        return value.replace("\\", "\\\\").replace('"', '\\"')
+
+    def import_local_track(self, filepath: Path) -> Optional[str]:
+        """Add a local audio file and return the imported track's persistent ID."""
+        source = self._escape_applescript_string(str(filepath))
+        script = f'''
+tell application "Music"
+    set importedTrack to add (POSIX file "{source}") to library playlist 1
+    return persistent ID of importedTrack
+end tell
+'''
+        success, output = self._run_applescript(script)
+        if not success or not output:
+            logger.warning("Failed to import local track %s: %s", filepath, output)
+            return None
+        return output
+
+    def add_library_track_to_playlist(self, playlist_name: str, persistent_id: str) -> bool:
+        """Add a library track identified by persistent ID to a user playlist."""
+        escaped_playlist = self._escape_applescript_string(playlist_name)
+        escaped_id = self._escape_applescript_string(persistent_id)
+        script = f'''
+tell application "Music"
+    set sourceTrack to some track of library playlist 1 whose persistent ID is "{escaped_id}"
+    duplicate sourceTrack to user playlist "{escaped_playlist}"
+end tell
+'''
+        success, output = self._run_applescript(script)
+        if not success:
+            logger.warning(
+                "Failed to add track %s to playlist %s: %s",
+                persistent_id,
+                playlist_name,
+                output,
+            )
+        return success
+
+    def remove_playlist_track(self, playlist_name: str, persistent_id: str) -> bool:
+        """Delete the first matching playlist entry without deleting the library track."""
+        escaped_playlist = self._escape_applescript_string(playlist_name)
+        escaped_id = self._escape_applescript_string(persistent_id)
+        script = f'''
+tell application "Music"
+    set targetPlaylist to user playlist "{escaped_playlist}"
+    repeat with playlistTrack in tracks of targetPlaylist
+        if persistent ID of playlistTrack is "{escaped_id}" then
+            delete playlistTrack
+            return true
+        end if
+    end repeat
+    return false
+end tell
+'''
+        success, output = self._run_applescript(script)
+        removed = success and output.lower() == "true"
+        if not removed:
+            logger.warning(
+                "Failed to remove track %s from playlist %s: %s",
+                persistent_id,
+                playlist_name,
+                output,
+            )
+        return removed
+
     def get_playlist_names(self) -> Optional[List[str]]:
         """
         Get list of all playlist names AND folder names in Apple Music.
@@ -148,12 +215,19 @@ end tell
         script = """
 tell application "Music"
     set playlistNames to {}
+    set oldDelimiters to AppleScript's text item delimiters
     try
         repeat with pl in (every user playlist)
-            set end of playlistNames to name of pl
+            if special kind of pl is none then
+                set end of playlistNames to name of pl
+            end if
         end repeat
-        return playlistNames
+        set AppleScript's text item delimiters to linefeed
+        set outputText to playlistNames as text
+        set AppleScript's text item delimiters to oldDelimiters
+        return outputText
     on error
+        set AppleScript's text item delimiters to oldDelimiters
         return {}
     end try
 end tell
@@ -162,7 +236,7 @@ end tell
         if not success or not output:
             return []
 
-        return [name.strip() for name in output.split(",") if name.strip()]
+        return [name.strip() for name in output.splitlines() if name.strip()]
 
     def get_user_playlists_with_counts(self) -> List[Dict[str, int | str]]:
         """
@@ -474,6 +548,7 @@ end tell
 
     def _get_regular_playlist_tracks(self, playlist_name: str) -> Optional[List[Dict]]:
         """Get tracks from a regular (non-folder) playlist."""
+        escaped_playlist_name = self._escape_applescript_string(playlist_name)
         script = f"""
 on cleanText(rawValue)
     try
@@ -503,16 +578,33 @@ tell application "Music"
     set oldDelimiters to AppleScript's text item delimiters
     
     try
-        set targetPlaylist to playlist "{playlist_name}"
+        set targetPlaylist to playlist "{escaped_playlist_name}"
         set trackCount to count of tracks of targetPlaylist
         if trackCount > 0 then
-            repeat with trk in tracks of targetPlaylist
+            set trackNames to name of every track of targetPlaylist
+            set trackIDs to persistent ID of every track of targetPlaylist
+            set trackArtists to artist of every track of targetPlaylist
+            set trackAlbums to album of every track of targetPlaylist
+            set trackGenres to genre of every track of targetPlaylist
+            set trackBPMs to bpm of every track of targetPlaylist
+            set trackYears to year of every track of targetPlaylist
+            set trackComposers to composer of every track of targetPlaylist
+            set trackDurations to duration of every track of targetPlaylist
+            try
+                set trackLocations to location of every track of targetPlaylist
+            on error
+                set trackLocations to {{}}
+                repeat trackCount times
+                    set end of trackLocations to missing value
+                end repeat
+            end try
+            repeat with trackIndex from 1 to trackCount
                 set trackLocation to ""
                 try
-                    set trackLocation to POSIX path of (location of trk as alias)
+                    set trackLocation to POSIX path of (item trackIndex of trackLocations as alias)
                 end try
                 set AppleScript's text item delimiters to tab
-                set end of trackRows to {{my cleanText(name of trk), my cleanText(persistent ID of trk), my cleanText(artist of trk), my cleanText(album of trk), my cleanText(genre of trk), my cleanText(bpm of trk), my cleanText(year of trk), my cleanText(composer of trk), my cleanText(duration of trk), my cleanText(trackLocation)}} as text
+                set end of trackRows to {{my cleanText(item trackIndex of trackNames), my cleanText(item trackIndex of trackIDs), my cleanText(item trackIndex of trackArtists), my cleanText(item trackIndex of trackAlbums), my cleanText(item trackIndex of trackGenres), my cleanText(item trackIndex of trackBPMs), my cleanText(item trackIndex of trackYears), my cleanText(item trackIndex of trackComposers), my cleanText(item trackIndex of trackDurations), my cleanText(trackLocation)}} as text
             end repeat
         end if
         set AppleScript's text item delimiters to linefeed

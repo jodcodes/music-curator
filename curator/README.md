@@ -14,6 +14,7 @@ Part of the [`music-curator`](https://github.com/jodcodes/music-curator) monorep
 | `curator organize` | Move playlists into genre folders | ✓ |
 | `curator dedupe` | Find and remove duplicate tracks across playlists | ✓ |
 | `curator curate` | Favourite Songs curation pipeline | ✓ |
+| `curator localize` | Replace unavailable playlist tracks with verified local files | ✓ |
 | `curator status` | Show last runs, job queue, dedupe stats | — |
 | `curator history` | Browse run log | — |
 | `curator export` | Export state to JSON | — |
@@ -66,6 +67,9 @@ curator dedupe
 # Run Favourite Songs curation (preview)
 curator curate --scope fav_songs
 
+# Preview local replacements for every own playlist (no changes)
+curator localize
+
 # Check current state
 curator status
 curator history
@@ -73,6 +77,32 @@ curator history
 # Export library state to JSON
 curator export --output my_library.json
 ```
+
+## Local playlist replacement
+
+`curator localize` scans all own Music.app playlists and writes a
+`localize-report.json` preview. It searches the configured local Music library
+for one exact artist/title match (and exact album when the playlist track has an
+album). Fuzzy scores are never used.
+
+```bash
+# Preview all own playlists; changes nothing.
+curator localize
+
+# Inspect a single playlist.
+curator localize --playlist "Playlist Name"
+
+# Apply only exact, unique matches after reviewing localize-report.json.
+curator localize --apply
+```
+
+The default source is `/Volumes/2TB_SSD/Media (Musik Mediathek)/Music Library
+[2025-06-20].musiclibrary`; override it with `--source PATH` when needed.
+When given a `.musiclibrary` bundle, the command searches its sibling `Music/`
+folder, where the audio files are stored.
+`--apply` imports the local file, adds it to the playlist, and only then removes
+the old playlist entry. Remixes, live versions, remasters, covers, unavailable
+files, and ambiguous matches are reported but never replaced automatically.
 
 ## How it works
 

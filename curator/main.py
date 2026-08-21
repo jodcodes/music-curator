@@ -24,6 +24,8 @@ Usage:
 import sys
 import os
 import argparse
+from collections import Counter
+from pathlib import Path
 
 from src.logger import setup_logger
 from src.apple_music import AppleMusicInterface
@@ -101,6 +103,37 @@ def require_macos(feature_name: str) -> bool:
     print(error(f"{feature_name} requires macOS and Music.app (AppleScript integration)."))
     print(info("Tip: On non-macOS, use metadata enrichment in Folder mode."))
     return False
+
+
+def run_localize(args=None):
+    """Preview or apply verified local replacements for unavailable playlist tracks."""
+    if not require_macos("Local playlist replacement"):
+        return 1
+
+    from src.track_localizer import TrackLocalizer
+
+    source = Path(getattr(args, "source", ""))
+    report_path = Path(getattr(args, "report", "localize-report.json"))
+    playlist_name = getattr(args, "playlist", None)
+    apply = getattr(args, "apply", False)
+    print_header("💾 Localize Playlists", "Replacing only verified local track matches")
+
+    try:
+        localizer = TrackLocalizer(source, music_client=AppleMusicInterface())
+        results = localizer.scan(playlist_name=playlist_name, apply=apply)
+        TrackLocalizer.write_report(report_path, results)
+    except (RuntimeError, ValueError, OSError) as exc:
+        logger.error("Local playlist replacement failed: %s", exc, exc_info=True)
+        print(error(f"Local playlist replacement failed: {exc}"))
+        return 1
+
+    for status, count in sorted(Counter(result.status for result in results).items()):
+        print(info(f"{status}: {count}"))
+    print(info(f"Report written to: {report_path}"))
+    if not apply:
+        print(info("Dry-run mode — no playlist entries were changed. Pass --apply to replace verified matches."))
+    print_footer()
+    return 0
 
 
 def run_mood_analysis(args=None):
@@ -990,6 +1023,24 @@ def main(argv=None):
     )
     add_feature_parser("organize", "Run playlist organization")
 
+    localize_parser = add_feature_parser(
+        "localize", "Preview/apply local replacements for unavailable playlist tracks"
+    )
+    localize_parser.add_argument("--playlist", help="Only process one user playlist")
+    localize_parser.add_argument(
+        "--source",
+        default="/Volumes/2TB_SSD/Media (Musik Mediathek)/Music Library [2025-06-20].musiclibrary",
+        help="Local Music library folder to search",
+    )
+    localize_parser.add_argument(
+        "--report", default="localize-report.json", help="JSON report output path"
+    )
+    localize_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Import, add, then remove only verified replacements",
+    )
+
     scan_parser = add_feature_parser("scan", "Scan Apple Music library and show stats")
     _ = scan_parser  # no extra args needed yet
 
@@ -1123,6 +1174,8 @@ def main(argv=None):
         return run_metadata_enrichment(args)
     elif args.feature == "organize":
         return run_playlist_organization()
+    elif args.feature == "localize":
+        return run_localize(args)
     elif args.feature == "scan":
         return run_scan(args)
     elif args.feature == "status":
