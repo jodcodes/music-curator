@@ -121,38 +121,31 @@ def _best_match(results: List[Dict], title: str, artist: str) -> Optional[Dict]:
     if not songs:
         songs = results
 
-    # 1. Exact title + artist
+    # 1. Exact title + exact artist
     for r in songs:
         if (r.get("trackName", "").lower().strip() == title_lower
                 and r.get("artistName", "").lower().strip() == artist_lower):
             return _normalize_result(r)
 
-    # 2. Title exact + artist contains
+    # 2. Exact title + artist contains (handles "Artist A & Artist B" → "Artist A")
     for r in songs:
-        if (r.get("trackName", "").lower().strip() == title_lower
-                and artist_lower in r.get("artistName", "").lower()):
+        r_artist = r.get("artistName", "").lower()
+        artist_match = (
+            artist_lower in r_artist
+            or r_artist.strip() in artist_lower
+        )
+        if r.get("trackName", "").lower().strip() == title_lower and artist_match:
             return _normalize_result(r)
 
-    # 3. Artist exact + title partial
+    # 3. Title partial + exact artist (handles "Song (feat. X)" ↔ "Song")
     for r in songs:
-        if (r.get("artistName", "").lower().strip() == artist_lower
-                and (title_lower in r.get("trackName", "").lower()
-                     or r.get("trackName", "").lower() in title_lower)):
+        r_title = r.get("trackName", "").lower().strip()
+        title_match = title_lower in r_title or r_title in title_lower
+        if title_match and r.get("artistName", "").lower().strip() == artist_lower:
             return _normalize_result(r)
 
-    # 4. Artist contains
-    for r in songs:
-        if artist_lower in r.get("artistName", "").lower():
-            return _normalize_result(r)
-
-    # 5. Title partial
-    for r in songs:
-        if (title_lower in r.get("trackName", "").lower()
-                or r.get("trackName", "").lower() in title_lower):
-            return _normalize_result(r)
-
-    # 6. First result
-    return _normalize_result(songs[0]) if songs else None
+    # No match — both title and artist must be present
+    return None
 
 
 def _normalize_result(r: Dict) -> Dict:
@@ -443,35 +436,32 @@ end tell
         artist_lower = artist.lower().strip()
         artist_normalized = unicodedata.normalize("NFC", artist_lower)
 
-        # 1. Exact title + artist
+        # 1. Exact title + exact artist
         for r in results:
             if r["name"].lower().strip() == title_lower and r["artist"].lower().strip() == artist_lower:
                 return r["persistent_id"]
 
-        # 2. Title match + artist contains
+        # 2. Exact title + artist contains (handles "Artist A, Artist B" → "Artist A")
         for r in results:
-            if r["name"].lower().strip() == title_lower and artist_lower in r["artist"].lower():
+            r_artist = r["artist"].lower()
+            r_artist_norm = unicodedata.normalize("NFC", r_artist)
+            artist_match = (
+                artist_lower in r_artist
+                or artist_normalized in r_artist_norm
+                or r_artist.strip() in artist_lower  # AM artist is subset of Spotify
+            )
+            if r["name"].lower().strip() == title_lower and artist_match:
                 return r["persistent_id"]
 
-        # 3. Artist exact + title partial
+        # 3. Title partial + exact artist (handles "Song (feat. X)" ↔ "Song")
         for r in results:
-            if r["artist"].lower().strip() == artist_lower and (
-                title_lower in r["name"].lower() or r["name"].lower() in title_lower
-            ):
+            r_title = r["name"].lower().strip()
+            title_match = title_lower in r_title or r_title in title_lower
+            if title_match and r["artist"].lower().strip() == artist_lower:
                 return r["persistent_id"]
 
-        # 4. Artist contains
-        for r in results:
-            if artist_lower in r["artist"].lower() or artist_normalized in unicodedata.normalize("NFC", r["artist"].lower()):
-                return r["persistent_id"]
-
-        # 5. Title partial
-        for r in results:
-            if title_lower in r["name"].lower() or r["name"].lower() in title_lower:
-                return r["persistent_id"]
-
-        # 6. First result
-        return results[0]["persistent_id"]
+        # No match — both title and artist must be present
+        return None
 
     def get_playlist_tracks(self, playlist_name: str) -> List[Tuple[str, str]]:
         """Return (name, artist) tuples for all tracks in the playlist."""
