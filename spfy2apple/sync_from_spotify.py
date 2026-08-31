@@ -499,11 +499,10 @@ class SpotifyToAppleSync:
         return result
 
     def _update_playlist(self, pl: Dict) -> Dict:
-        """Update an existing Apple Music playlist to match the current Spotify state.
+        """Diff-update an Apple Music playlist to match the current Spotify state.
 
-        Clears all tracks from the Apple Music playlist and re-adds the current
-        Spotify tracks. This is the most reliable way to mirror Spotify changes
-        (adds, removes, reorders). Also updates the playlist description.
+        Removes tracks no longer on Spotify, adds tracks new on Spotify.
+        Tracks present on both sides are left untouched.
         """
         name = pl["name"]
         sp_id = pl["id"]
@@ -519,42 +518,67 @@ class SpotifyToAppleSync:
             self.logger.info(f"  [DRY RUN] Would update '{name}' with {len(tracks)} tracks{desc_preview}")
             return {"dry_run": True, "tracks_total": len(tracks), "action": "update", "description": description}
 
-        # With the AppleScript approach we use playlist names, not IDs.
-        # The playlist name is the Spotify playlist name (which we used when creating).
-        # Verify it still exists in Apple Music.
         am_names = set(self.apple_music.get_all_playlist_names())
         if name not in am_names:
             self.logger.error(f"  Could not find Apple Music playlist '{name}'")
             return {"error": "Apple Music playlist not found", "tracks_total": len(tracks)}
 
-        # Search all tracks (library + catalog, parallel)
-        deduped, found_count, not_found_count, catalog_only = self._search_all_tracks(tracks, name)
+        # Compute diff between current AM playlist and Spotify
+        am_tracks = self.apple_music.get_playlist_tracks(name)
 
-        # Clear existing tracks from the Apple Music playlist via AppleScript
-        removed = self.apple_music.delete_all_tracks(name)
-        self.logger.info(f"  🗑️  Cleared {removed} tracks from '{name}'")
+        def _norm(s: str) -> str:
+            return s.lower().strip()
 
-        # Re-add current tracks via AppleScript
-        added = self.apple_music.add_tracks_to_playlist(name, deduped)
+        am_set = {(_norm(t[0]), _norm(t[1])) for t in am_tracks}
+        sp_set = {(_norm(t["title"]), _norm(t["artist"])) for t in tracks}
 
-        # Update description
+        # Remove: in AM but not in Spotify
+        to_remove_keys = am_set - sp_set
+        to_remove = [
+            (t[0], t[1]) for t in am_tracks
+            if (_norm(t[0]), _norm(t[1])) in to_remove_keys
+        ]
+
+        # Add: in Spotify but not in AM
+        to_add_sp = [
+            t for t in tracks
+            if (_norm(t["title"]), _norm(t["artist"])) not in am_set
+        ]
+
+        removed = 0
+        if to_remove:
+            removed = self.apple_music.remove_tracks_from_playlist(name, to_remove)
+            self.logger.info(f"  🗑️  Removed {removed}/{len(to_remove)} tracks from '{name}'")
+        else:
+            self.logger.info(f"  ✔️  No tracks to remove from '{name}'")
+
+        added = 0
+        not_found_count = 0
+        catalog_only: List[Dict] = []
+        if to_add_sp:
+            deduped, found_count, not_found_count, catalog_only = self._search_all_tracks(to_add_sp, name)
+            added = self.apple_music.add_tracks_to_playlist(name, deduped)
+        else:
+            self.logger.info(f"  ✔️  No new tracks to add to '{name}'")
+
         if description:
             if self.apple_music.set_playlist_description(name, description):
                 self.logger.info(f"  📝 Updated description for '{name}'")
             else:
                 self.logger.warning(f"  ⚠️  Could not set description for '{name}'")
 
-        # Record updated state
         self.state.record(sp_id, name, snapshot_id, len(tracks), apple_music_id="")
 
+        unchanged = len(am_set & sp_set)
         self.logger.info(
-            f"  ✅ Updated '{name}': {added} tracks added, "
-            f"{not_found_count} not found in catalog"
+            f"  ✅ Updated '{name}': +{added} added, -{removed} removed, "
+            f"{unchanged} unchanged, {not_found_count} not found"
         )
 
         result: Dict = {
             "tracks_added": added,
             "tracks_removed": removed,
+            "tracks_unchanged": unchanged,
             "tracks_not_found": not_found_count,
             "tracks_total": len(tracks),
             "action": "updated",
@@ -752,7 +776,8 @@ def main(argv: list[str] | None = None) -> int:
                 elif s.get("action") == "updated":
                     print(
                         f"✅ {name}: updated — "
-                        f"+{s['tracks_added']} added, -{s.get('tracks_removed', 0)} removed "
+                        f"+{s['tracks_added']} added, -{s.get('tracks_removed', 0)} removed, "
+                        f"={s.get('tracks_unchanged', 0)} unchanged "
                         f"({s.get('tracks_not_found', 0)} not found, "
                         f"{s['tracks_total']} total on Spotify)"
                     )

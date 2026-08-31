@@ -473,6 +473,109 @@ end tell
         # 6. First result
         return results[0]["persistent_id"]
 
+    def get_playlist_tracks(self, playlist_name: str) -> List[Tuple[str, str]]:
+        """Return (name, artist) tuples for all tracks in the playlist."""
+        escaped_pl = self._escape(playlist_name)
+        script = f"""
+on cleanText(rawValue)
+    try
+        set textValue to rawValue as text
+    on error
+        set textValue to ""
+    end try
+    set textValue to my replaceText(tab, " ", textValue)
+    set textValue to my replaceText(linefeed, " ", textValue)
+    set textValue to my replaceText(return, " ", textValue)
+    return textValue
+end cleanText
+
+on replaceText(findText, replaceTextValue, sourceText)
+    set oldDelimiters to AppleScript's text item delimiters
+    set AppleScript's text item delimiters to findText
+    set textItems to text items of sourceText
+    set AppleScript's text item delimiters to replaceTextValue
+    set sourceText to textItems as text
+    set AppleScript's text item delimiters to oldDelimiters
+    return sourceText
+end replaceText
+
+tell application "Music"
+    try
+        set thePlaylist to playlist "{escaped_pl}"
+        set outputLines to {{}}
+        repeat with trk in (tracks of thePlaylist)
+            set trkName to my cleanText(name of trk)
+            set trkArtist to my cleanText(artist of trk)
+            set end of outputLines to (trkName & tab & trkArtist)
+        end repeat
+        set AppleScript's text item delimiters to linefeed
+        set outputText to outputLines as text
+        set AppleScript's text item delimiters to ""
+        return outputText
+    on error errMsg
+        return ""
+    end try
+end tell
+"""
+        ok, output = self._run_applescript(script, timeout=60)
+        if not ok or not output:
+            return []
+        result = []
+        for line in output.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 2:
+                result.append((parts[0], parts[1]))
+        return result
+
+    def remove_tracks_from_playlist(self, playlist_name: str, tracks: List[Tuple[str, str]]) -> int:
+        """Remove specific tracks (by name+artist) from a playlist. Returns count removed."""
+        if not tracks:
+            return 0
+
+        escaped_pl = self._escape(playlist_name)
+        # Build AppleScript list of {name, artist} pairs
+        pairs_script = ", ".join(
+            f'{{"{self._escape(name)}", "{self._escape(artist)}"}}'
+            for name, artist in tracks
+        )
+
+        script = f"""
+tell application "Music"
+    try
+        set thePlaylist to playlist "{escaped_pl}"
+        set removeList to {{{pairs_script}}}
+        set tracksToDelete to {{}}
+        repeat with trk in (tracks of thePlaylist)
+            set trkName to (name of trk) as text
+            set trkArtist to (artist of trk) as text
+            repeat with pair in removeList
+                set pairName to (item 1 of pair) as text
+                set pairArtist to (item 2 of pair) as text
+                if (trkName = pairName) and (trkArtist = pairArtist) then
+                    set end of tracksToDelete to trk
+                    exit repeat
+                end if
+            end repeat
+        end repeat
+        set removedCount to count of tracksToDelete
+        repeat with trk in tracksToDelete
+            delete trk
+        end repeat
+        return removedCount
+    on error errMsg
+        return 0
+    end try
+end tell
+"""
+        ok, output = self._run_applescript(script, timeout=120)
+        if not ok:
+            self.logger.warning(f"remove_tracks_from_playlist failed for '{playlist_name}': {output}")
+            return 0
+        try:
+            return int(output.strip())
+        except ValueError:
+            return 0
+
     def add_tracks_to_playlist(self, playlist_name: str, track_ids: List[str]) -> int:
         if not track_ids:
             return 0
@@ -492,7 +595,8 @@ tell application "Music"
     set addedCount to 0
     repeat with trackID in trackIDs
         try
-            set theTrack to (first track of libPlaylist whose persistent ID is trackID)
+            set tID to trackID as text
+            set theTrack to (first track of libPlaylist whose persistent ID is tID)
             duplicate theTrack to thePlaylist
             set addedCount to addedCount + 1
         end try
