@@ -1,2 +1,5 @@
 __pycache__/
 data/sync_state.json
+.venv/
+state/.last_sync
+state/.last_failure

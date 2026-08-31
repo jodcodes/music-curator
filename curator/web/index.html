@@ -18,9 +18,9 @@
                 <li><a href="#" data-view="dashboard" class="nav-link active">Dashboard</a></li>
                 <li><a href="#" data-view="playlists" class="nav-link">Playlists</a></li>
                 <li><a href="#" data-view="enrich" class="nav-link">Enrich</a></li>
-                <li><a href="#" data-view="analyze" class="nav-link">Analyze</a></li>
+                <li><a href="#" data-view="analyze" class="nav-link">Mood</a></li>
                 <li><a href="#" data-view="organize" class="nav-link">Organize</a></li>
-                <li><button type="button" class="nav-link" data-view="curation">Curation Review</button></li>
+                <li><button type="button" class="nav-link" data-view="curation">Curate</button></li>
                 <li><a href="#" data-view="history" class="nav-link">History</a></li>
             </ul>
             <div class="nav-actions">
@@ -70,10 +70,10 @@
                     <div class="card action-card">
                         <h3>Quick Actions</h3>
                         <div class="action-buttons">
-                            <button class="btn btn-primary" data-action="classify">Classify Playlists</button>
-                            <button class="btn btn-primary" data-action="enrich">Enrich Metadata</button>
-                            <button class="btn btn-primary" data-action="analyze">Analyze Mood</button>
-                            <button class="btn btn-secondary" data-action="organize">Organize</button>
+                            <button class="btn btn-primary" data-action="organize">📂 Organize — Playlists nach Genre sortieren</button>
+                            <button class="btn btn-primary" data-action="enrich">🎵 Enrich — Metadata auffüllen (BPM, Genre, Cover)</button>
+                            <button class="btn btn-primary" data-action="analyze">🎭 Mood — KI-Stimmungsanalyse (Woe/Frolic/Dread/Malice)</button>
+                            <button class="btn btn-secondary" data-action="classify">❤️ Curate — Favourite Songs in Genre-Playlists</button>
                         </div>
                     </div>
 
@@ -123,8 +123,13 @@
             <!-- Enrichment View -->
             <section id="enrich" class="view">
                 <div class="card">
-                    <h3>Metadata Enrichment</h3>
-                    <p class="text-muted">Enhance track metadata from multiple sources.</p>
+                    <h3>🎵 Metadata Enrichment</h3>
+                    <div class="feature-explanation">
+                        <p><strong>Was es tut:</strong> Füllt fehlende Metadata-Felder in deinen lokalen Audio-Dateien — BPM, Genre, Release Year, Composer und Cover Art.</p>
+                        <p><strong>Quellen:</strong> MusicBrainz (primär), AcousticBrainz (BPM), Discogs (Genre), Wikidata, Last.fm (Tags). Cover Art aus CoverArtArchive, Spotify, Last.fm, Discogs.</p>
+                        <p><strong>Smart Strategy:</strong> Pro Feld wird nur so lange gesucht, bis eine Quelle es liefert — ca. 50% weniger API-Calls. Bereits angereicherte Tracks werden bei späteren Läufen übersprungen.</p>
+                        <p class="text-muted">⚠ Nur für heruntergeladene Dateien (uploaded/matched). Cloud-only Tracks werden übersprungen. Schreibt nur year, bpm, genre, composer in die Datei-Tags.</p>
+                    </div>
 
                     <div class="form-group">
                         <label>Sources to use:</label>
@@ -169,8 +174,19 @@
             <!-- Analyze View -->
             <section id="analyze" class="view">
                 <div class="card">
-                    <h3>Mood Analysis</h3>
-                    <p class="text-muted">Classify playlists by emotional mood (Woe · Frolic · Dread · Malice).</p>
+                    <h3>🎭 Mood Analysis (4 Tempers)</h3>
+                    <div class="feature-explanation">
+                        <p><strong>Was es tut:</strong> Klassifiziert deine Playlists in 4 emotionale Kategorien und verschiebt sie in entsprechende Ordner in Apple Music.</p>
+                        <div class="temper-grid">
+                            <div class="temper-card temper-woe"><strong>Woe</strong> — Melancholie, Trauer, Introspektion</div>
+                            <div class="temper-card temper-frolic"><strong>Frolic</strong> — Freude, Energie, Celebration</div>
+                            <div class="temper-card temper-dread"><strong>Dread</strong> — Angst, Anspannung, Dramatik</div>
+                            <div class="temper-card temper-malice"><strong>Malice</strong> — Wut, Aggression, Intensität</div>
+                        </div>
+                        <p><strong>Wie es funktioniert:</strong> Pro Track wird Name, Artist, Album und Genre an OpenAI geschickt (modell: <code id="moodModel">gpt-4.1-nano</code>). Die KI gibt Temperament + Confidence zurück. Danach wird die ganze Playlist anhand der Track-Ergebnisse klassifiziert.</p>
+                        <p><strong>Ordnerstruktur:</strong> <code>4 Tempers / &lt;Genre&gt; / &lt;Temper&gt;</code> — z.B. <code>4 Tempers / Electronic / Woe</code>. Bestehende Ordner werden wiederverwendet.</p>
+                        <p class="text-muted">⚠ Benötigt OpenAI API Key. Kosten: 1 API-Call pro Track + 1 pro Playlist. Nur macOS.</p>
+                    </div>
 
                     <div class="form-group">
                         <label for="analyzePlaylists">Select Playlists:</label>
@@ -194,8 +210,13 @@
             <!-- Organize View -->
             <section id="organize" class="view">
                 <div class="card">
-                    <h3>Organize Playlists</h3>
-                    <p class="text-muted">Move playlists to organized folders based on genre.</p>
+                    <h3>📂 Organize Playlists</h3>
+                    <div class="feature-explanation">
+                        <p><strong>Was es tut:</strong> Klassifiziert Playlists nach Genre und verschiebt sie in Genre-Ordner in Apple Music.</p>
+                        <p><strong>Wie es funktioniert:</strong> Pro Track werden Genre-Tag, Artist-Matching und Text-Normalisierung ausgewertet. Die Ergebnisse werden zu einem Playlist-Score aggregiert. Ein TF-IDF-Fallback greift, wenn das primäre Scoring unklar ist. Wenn ein Track kein Genre-Tag hat, wird MusicBrainz/Discogs befragt.</p>
+                        <p><strong>Genre-Kategorien:</strong> Hip-Hop, Electronic, Jazz, Rock, Disco/Funk/Soul, World, und mehr. Konfigurierbar via <code>data/config/genre_map.json</code>.</p>
+                        <p class="text-muted">⚠ Dry-Run zeigt zuerst, was passieren würde. Bestehende Ordner werden wiederverwendet. Nur macOS.</p>
+                    </div>
 
                     <div id="platformWarning" class="alert alert-info" style="display: none;">
                         ⓘ Playlist organization requires macOS. Metadata enrichment is available on all platforms.
@@ -240,6 +261,17 @@
 
             <!-- Curation Review View -->
             <section id="curation-view" class="view">
+                <div class="card" style="margin-bottom: var(--spacing);">
+                    <h3>❤️ Fav Songs Curation</h3>
+                    <div class="feature-explanation">
+                        <p><strong>Was es tut:</strong> Sortiert die "Favourite Songs"-Liste in Genre-Subplaylists innerhalb einer "Fav Songs"-Ordnerstruktur.</p>
+                        <p><strong>Wie es funktioniert:</strong> Jeder Track aus Favourite Songs bekommt ein Genre (aus dem Track-Tag, kanonisch gemappt) und ein Temperament (Keyword-Matching: "dark/dread/night" → Dread, "sad/lonely" → Woe, "rage/hard" → Malice, sonst → Frolic). Danach wird pro Genre eine Playlist <code>♥ &lt;Genre&gt;</code> im <code>Fav Songs</code>-Ordner erstellt und der Track dorthin kopiert.</p>
+                        <p><strong>Temperament hier:</strong> Simples Keyword-Matching — <em>keine</em> KI, keine API-Kosten. (Für KI-basierte Stimmungsanalyse siehe <a href="#" onclick="showView('analyze');return false;">Mood Analysis</a>.)</p>
+                        <p><strong>Safety:</strong> Preview-Modus zeigt erst was passieren würde. <code>--apply</code> führt Changes aus. Smoke-Test macht einen reversiblen Einzeltrack-Test vor dem echten Apply. Bestehende Ordner/Playlists werden wiederverwendet.</p>
+                        <p class="text-muted">⚠ Nur macOS. Tracks ohne Genre-Tag gehen zu "Sonstige".</p>
+                    </div>
+                </div>
+
                 <div class="control-center">
                     <aside class="control-rail">
                         <h3>Fav Songs</h3>

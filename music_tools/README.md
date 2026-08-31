@@ -22,7 +22,7 @@ The scripts stay standalone JXA files, but the product surface is unified in `cu
 Der launchd-Agent triggert `bin/run_all.sh`. Der Wrapper läuft **nur**, wenn alle vier Bedingungen erfüllt sind:
 
 1. **2TB SSD gemountet** (`/Volumes/2TB_SSD`)
-2. **Mediathek-Datei auf der SSD vorhanden** (`/Volumes/2TB_SSD/Music Library [2025-06-20].musiclibrary`)
+2. **Mediathek-Datei auf der SSD vorhanden** (`/Volumes/2TB_SSD/Media (Musik Mediathek)/Music Library [2025-06-20].musiclibrary`)
 3. **Mac am Stromnetz** (`pmset -g ps` enthält `AC Power`)
 4. **Letzter erfolgreicher Lauf ≥ 12 h her** (Stempel: `state/.last_sync`)
 

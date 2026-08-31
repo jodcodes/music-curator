@@ -1280,6 +1280,79 @@ label {
 }
 
 /* ============================================================================
+   Feature Explanations
+   ============================================================================ */
+
+.feature-explanation {
+    margin-bottom: var(--spacing);
+    padding: var(--spacing);
+    background-color: var(--bg-hover);
+    border-radius: var(--radius);
+    border-left: 3px solid var(--color-primary);
+}
+
+.feature-explanation p {
+    margin-bottom: 8px;
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+}
+
+.feature-explanation p:last-child {
+    margin-bottom: 0;
+}
+
+.feature-explanation code {
+    background-color: rgba(99, 102, 241, 0.12);
+    color: var(--color-primary);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.85em;
+}
+
+.temper-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.temper-card {
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    border-left: 4px solid;
+    background-color: var(--bg-page);
+    font-size: var(--font-size-sm);
+}
+
+.temper-card.temper-woe {
+    border-left-color: #748ffc;
+    color: #748ffc;
+}
+
+.temper-card.temper-frolic {
+    border-left-color: #ffd43b;
+    color: #b08300;
+}
+
+.temper-card.temper-dread {
+    border-left-color: #6366f1;
+    color: #6366f1;
+}
+
+.temper-card.temper-malice {
+    border-left-color: #ef4444;
+    color: #ef4444;
+}
+
+html.dark .temper-card.temper-woe {
+    color: #a5b4fc;
+}
+
+html.dark .temper-card.temper-frolic {
+    color: #fcd34d;
+}
+
+/* ============================================================================
    Print Styles
    ============================================================================ */
 

@@ -59,3 +59,13 @@ def test_parse_last_run_timestamp_falls_back_to_zero_on_garbage():
 def test_parse_last_run_timestamp_falls_back_to_zero_on_empty():
     result = run("parse_last_run_timestamp", "")
     assert result.stdout.strip() == "0"
+
+
+def test_timestamp_is_within_cooldown_when_recent():
+    result = run("is_within_cooldown", "1000", "3600", "2000")
+    assert result.returncode == 0
+
+
+def test_timestamp_is_not_within_cooldown_when_expired():
+    result = run("is_within_cooldown", "1000", "3600", "5000")
+    assert result.returncode != 0

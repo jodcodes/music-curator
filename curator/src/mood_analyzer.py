@@ -527,9 +527,9 @@ end tell
 class OpenAILLMClient(LLMClient):
     """OpenAI GPT-based classification client"""
 
-    def __init__(self, model: str = "gpt-4o-mini"):
+    def __init__(self, model: Optional[str] = None):
         self.api_key = os.getenv("OPENAI_API_KEY")
-        self.model = model
+        self.model = model or os.getenv("OPENAI_MODEL", "gpt-4.1-nano")
         self.base_url = "https://api.openai.com/v1/chat/completions"
 
         if not self.api_key:

@@ -94,7 +94,7 @@ end saveLastRunDate
 
 -- 🛡 Preflight: SSD gemountet, Mediathek-Datei vorhanden, am Strom
 set ssdMount to "/Volumes/2TB_SSD"
-set musicLibraryPath to "/Volumes/2TB_SSD/Music Library [2025-06-20].musiclibrary"
+set musicLibraryPath to "/Volumes/2TB_SSD/Media (Musik Mediathek)/Music Library [2025-06-20].musiclibrary"
 set preflightOK to true
 set preflightReason to ""
 tell application "System Events"
@@ -199,7 +199,6 @@ else
 	my writeToFile("=== Skriptende [FAIL] " & totalAlbumsMissing & " Playlist(s) fehlen, " & totalTrackErrors & " Track-Fehler — Checkpoint NICHT verschoben ===" & linefeed, logFile)
 	error "route_albums_to_playlists: " & totalAlbumsMissing & " missing playlist(s), " & totalTrackErrors & " track error(s) — see " & errorFile number 1
 end if
-
 
 
 

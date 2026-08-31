@@ -38,7 +38,7 @@ const ERROR_FILE = `${LOG_DIR}/find_playlist_duplicates.err.log`;
 
 // --- Preflight: SSD gemountet, Mediathek-Datei vorhanden, am Strom ---
 const SSD_MOUNT = "/Volumes/2TB_SSD";
-const MUSIC_LIBRARY_PATH = `${SSD_MOUNT}/Music Library [2025-06-20].musiclibrary`;
+const MUSIC_LIBRARY_PATH = `${SSD_MOUNT}/Media (Musik Mediathek)/Music Library [2025-06-20].musiclibrary`;
 
 // Gibt einen Skip-Grund (String) zurück, falls Vorbedingungen nicht erfüllt
 // sind, sonst null. (Kein $.exit – das ist in diesem JXA-Kontext nicht

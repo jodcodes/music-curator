@@ -13,7 +13,7 @@ set -u
 # --- Konfiguration ---
 SSD_VOLUME_NAME="2TB_SSD"
 SSD_MOUNT="/Volumes/$SSD_VOLUME_NAME"
-MUSIC_LIBRARY_PATH="$SSD_MOUNT/Music Library [2025-06-20].musiclibrary"
+MUSIC_LIBRARY_PATH="$SSD_MOUNT/Media (Musik Mediathek)/Music Library [2025-06-20].musiclibrary"
 MIN_INTERVAL_SECONDS=43200   # 12 h
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"

@@ -43,6 +43,19 @@ parse_last_run_timestamp() {
     fi
 }
 
+# Returns success when timestamp is within cooldown_seconds of current_time.
+is_within_cooldown() {
+    local timestamp="$1"
+    local cooldown_seconds="$2"
+    local current_time="$3"
+
+    [[ "$timestamp" =~ ^[0-9]+$ ]] || return 1
+    [[ "$cooldown_seconds" =~ ^[0-9]+$ ]] || return 1
+    [[ "$current_time" =~ ^[0-9]+$ ]] || return 1
+    [ "$current_time" -ge "$timestamp" ] || return 1
+    [ $((current_time - timestamp)) -lt "$cooldown_seconds" ]
+}
+
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     cmd="$1"
     shift
@@ -50,6 +63,7 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
         validate_python_interpreter) validate_python_interpreter "$@"; exit $? ;;
         parse_stale_sync_days) parse_stale_sync_days "$@" ;;
         parse_last_run_timestamp) parse_last_run_timestamp "$@" ;;
-        *) echo "usage: $0 {validate_python_interpreter|parse_stale_sync_days|parse_last_run_timestamp} args..." >&2; exit 2 ;;
+        is_within_cooldown) is_within_cooldown "$@"; exit $? ;;
+        *) echo "usage: $0 {validate_python_interpreter|parse_stale_sync_days|parse_last_run_timestamp|is_within_cooldown} args..." >&2; exit 2 ;;
     esac
 fi

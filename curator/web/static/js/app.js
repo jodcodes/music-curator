@@ -187,7 +187,7 @@ function showView(viewName) {
             enrich: 'Enrich Metadata',
             analyze: 'Analyze Mood',
             organize: 'Organize Playlists',
-            curation: 'Curation Review',
+            curation: 'Fav Songs Curation',
             history: 'Library History',
         };
         DOM.pageTitle().textContent = titles[viewName] || viewName;
@@ -1436,7 +1436,7 @@ function setupEventListeners() {
     document.querySelectorAll('[data-action]').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const action = btn.dataset.action;
-            const views = { classify: 'playlists', enrich: 'enrich', analyze: 'analyze', organize: 'organize' };
+            const views = { classify: 'curation', enrich: 'enrich', analyze: 'analyze', organize: 'organize' };
             if (views[action]) showView(views[action]);
         });
     });

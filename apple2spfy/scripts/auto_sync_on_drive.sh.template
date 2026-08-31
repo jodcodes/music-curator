@@ -45,6 +45,8 @@ if [ ! -d "$DRIVE_PATH" ]; then
 fi
 
 LAST_RUN_FILE="$HOME/.apple2spfy_last_run"
+LAST_FAILURE_FILE="$HOME/.apple2spfy_last_failure"
+FAILURE_COOLDOWN_SECONDS=3600
 ENV_FILE="$SCRIPT_DIR/.env"
 
 # Read STALE_SYNC_DAYS from .env (default to 7 days if not found/invalid)
@@ -74,6 +76,18 @@ if [ -f "$LAST_RUN_FILE" ]; then
     fi
 fi
 
+# A mounted volume is modified continuously while Music updates its library.
+# Do not retry a failed sync on every resulting WatchPaths event.
+if [ -f "$LAST_FAILURE_FILE" ]; then
+    LAST_FAILURE=$(parse_last_run_timestamp "$(cat "$LAST_FAILURE_FILE" 2>/dev/null)")
+    CURRENT_TIME=$(date +%s)
+    if is_within_cooldown "$LAST_FAILURE" "$FAILURE_COOLDOWN_SECONDS" "$CURRENT_TIME"; then
+        MINUTES_LEFT=$(((FAILURE_COOLDOWN_SECONDS - (CURRENT_TIME - LAST_FAILURE)) / 60))
+        echo "$(date): Previous sync failed; retrying in approximately ${MINUTES_LEFT}m." >> "$LOG_FILE"
+        exit 0
+    fi
+fi
+
 # Validate the interpreter before running anything. Under launchd, PATH is
 # minimal — never trust a bare "python3" without checking it first.
 if ! validate_python_interpreter "$PYTHON_CMD"; then
@@ -92,8 +106,10 @@ SYNC_EXIT_CODE=$?
 # Create marker file if successful
 if [ $SYNC_EXIT_CODE -eq 0 ]; then
     date +%s > "$LAST_RUN_FILE"
+    rm -f "$LAST_FAILURE_FILE"
     echo "$(date): [SUCCESS] Sync completed successfully" >> "$LOG_FILE"
 else
+    date +%s > "$LAST_FAILURE_FILE"
     echo "$(date): [FAIL] Sync failed with exit code $SYNC_EXIT_CODE" >> "$LOG_FILE"
     exit 1
 fi

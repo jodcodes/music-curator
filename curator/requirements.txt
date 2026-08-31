@@ -10,6 +10,8 @@ sqlalchemy>=2.0.0          # ORM for database access
 celery>=5.3.0              # Background task queue
 redis>=5.0.0               # Task broker and caching
 python-socketio>=5.9.0     # WebSocket support
+tqdm>=4.66.0                # Progress bars for batch operations
+mutagen>=1.47.0             # Audio tag reading/writing (MP3, M4A, AIFF, WAV)
 
 # Development and code quality (move to requirements-dev.txt if using setuptools)
 pytest>=7.4.0              # Testing framework

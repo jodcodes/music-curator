@@ -36,7 +36,7 @@ const ERROR_FILE = `${LOG_DIR}/cleanup_old_genre_playlists.err.log`;
 
 // --- Preflight: SSD gemountet, Mediathek-Datei vorhanden, am Strom ---
 const SSD_MOUNT = "/Volumes/2TB_SSD";
-const MUSIC_LIBRARY_PATH = `${SSD_MOUNT}/Music Library [2025-06-20].musiclibrary`;
+const MUSIC_LIBRARY_PATH = `${SSD_MOUNT}/Media (Musik Mediathek)/Music Library [2025-06-20].musiclibrary`;
 
 const PREFIX = "♥ ";
 
