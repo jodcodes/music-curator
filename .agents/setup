@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+venv="$repo_root/.venv"
+
+step() {
+  local label="$1"
+  shift
+  local started
+  started="$(date +%s)"
+  printf '==> %s\n' "$label"
+  "$@"
+  printf '<== %s (%ss)\n' "$label" "$(( $(date +%s) - started ))"
+}
+
+cd "$repo_root"
+
+if [[ ! -x "$venv/bin/python" ]]; then
+  step "Creating Python virtual environment" python3 -m venv "$venv"
+fi
+
+step "Installing Python development dependencies" \
+  "$venv/bin/python" -m pip install --disable-pip-version-check \
+  -e "./curator[dev]" \
+  -r apple2spfy/requirements.txt \
+  -r spfy2apple/requirements.txt
+
+printf 'Orb setup complete: %s\n' "$venv"

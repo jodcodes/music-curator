@@ -45,6 +45,7 @@ results.json
 *.csv
 
 # repo-local agent/tool state
+.amp/portals/
 .superpowers/
 todo
 openspec_upstream

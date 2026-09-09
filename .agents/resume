@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+venv="$repo_root/.venv"
+
+if [[ ! -x "$venv/bin/python" ]]; then
+  printf 'Python environment is missing; run .agents/setup.\n' >&2
+  exit 1
+fi
+
+printf 'Orb Python environment is ready: %s\n' "$venv"
