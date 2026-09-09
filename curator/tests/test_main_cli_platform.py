@@ -171,7 +171,6 @@ def test_curate_feature_accepts_dry_run(monkeypatch):
     calls = {}
 
     def fake_run_curation(args):
-        calls["scope"] = args.scope
         calls["apply"] = args.apply
         calls["smoke_test"] = args.smoke_test
         return 0
@@ -179,8 +178,8 @@ def test_curate_feature_accepts_dry_run(monkeypatch):
     monkeypatch.setattr(main, "run_curation", fake_run_curation, raising=False)
     monkeypatch.setattr(main, "IS_MACOS", True)
 
-    assert main.main(["curate", "--scope", "fav_songs"]) == 0
-    assert calls == {"scope": "fav_songs", "apply": False, "smoke_test": False}
+    assert main.main(["curate"]) == 0
+    assert calls == {"apply": False, "smoke_test": False}
 
 
 def test_curate_feature_accepts_apply(monkeypatch):
@@ -189,7 +188,6 @@ def test_curate_feature_accepts_apply(monkeypatch):
     calls = {}
 
     def fake_run_curation(args):
-        calls["scope"] = args.scope
         calls["apply"] = args.apply
         calls["smoke_test"] = args.smoke_test
         return 0
@@ -197,8 +195,8 @@ def test_curate_feature_accepts_apply(monkeypatch):
     monkeypatch.setattr(main, "run_curation", fake_run_curation, raising=False)
     monkeypatch.setattr(main, "IS_MACOS", True)
 
-    assert main.main(["curate", "--scope", "fav_songs", "--apply"]) == 0
-    assert calls == {"scope": "fav_songs", "apply": True, "smoke_test": False}
+    assert main.main(["curate", "--apply"]) == 0
+    assert calls == {"apply": True, "smoke_test": False}
 
 
 def test_curate_feature_accepts_smoke_test(monkeypatch):
@@ -207,7 +205,6 @@ def test_curate_feature_accepts_smoke_test(monkeypatch):
     calls = {}
 
     def fake_run_curation(args):
-        calls["scope"] = args.scope
         calls["apply"] = args.apply
         calls["smoke_test"] = args.smoke_test
         return 0
@@ -215,8 +212,8 @@ def test_curate_feature_accepts_smoke_test(monkeypatch):
     monkeypatch.setattr(main, "run_curation", fake_run_curation, raising=False)
     monkeypatch.setattr(main, "IS_MACOS", True)
 
-    assert main.main(["curate", "--scope", "fav_songs", "--smoke-test"]) == 0
-    assert calls == {"scope": "fav_songs", "apply": False, "smoke_test": True}
+    assert main.main(["curate", "--smoke-test"]) == 0
+    assert calls == {"apply": False, "smoke_test": True}
 
 
 def test_localize_defaults_to_dry_run_and_all_playlists(monkeypatch):

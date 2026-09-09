@@ -1,10 +1,11 @@
 from unittest.mock import patch
 
+import pytest
+
 from src.curation_models import (
     AssignmentSource,
     AssignmentType,
     CurationAssignment,
-    TemperBucket,
 )
 from src.apple_music import AppleMusicInterface
 from src.curation_service import CurationService
@@ -30,17 +31,17 @@ class FakeAppleMusic:
 
 
 class FakeTemperClassifier:
+    def __init__(self):
+        self.calls = []
+
     def classify_track(self, track):
-        return (
-            TemperBucket.FROLIC
-            if track["persistent_id"] == "track-1"
-            else TemperBucket.DREAD
-        )
+        self.calls.append(track)
+        return None
 
 
 class StaticTemperClassifier:
     def classify_track(self, track):
-        return TemperBucket.FROLIC
+        return None
 
 
 class FakeApplier:
@@ -232,9 +233,10 @@ class SelectedPlaylistTracks:
 
 
 def test_fav_preview_builds_assignments_and_changes():
+    classifier = FakeTemperClassifier()
     service = CurationService(
         apple_music=FakeAppleMusic(),
-        temper_classifier=FakeTemperClassifier(),
+        temper_classifier=classifier,
     )
 
     preview = service.preview_fav_songs()
@@ -242,17 +244,14 @@ def test_fav_preview_builds_assignments_and_changes():
     targets = [a["target_path"] for a in preview["assignments"]]
     assert ["Fav Songs", "♥ Hip Hop & RnB"] in targets
     assert ["Fav Songs", "♥ Electronic"] in targets
-    assert set(preview["grouped"]["Hip Hop & RnB"]) == {
-        "Woe",
-        "Frolic",
-        "Dread",
-        "Malice",
-    }
-    assert preview["grouped"]["Hip Hop & RnB"]["Frolic"][0]["item_id"] == "track-1"
-    assert preview["grouped"]["Electronic"]["Dread"][0]["item_id"] == "track-2"
+    assert preview["grouped"]["Hip Hop & RnB"][0]["item_id"] == "track-1"
+    assert preview["grouped"]["Electronic"][0]["item_id"] == "track-2"
+    assert "temperament" not in preview["assignments"][0]
+    assert classifier.calls == []
     assert preview["changes"][0]["action"] == "ensure_folder"
 
 
+@pytest.mark.skip(reason="playlist-temper curation was removed")
 def test_selected_playlist_temper_preview_splits_tracks_by_genre_and_temper():
     service = CurationService(
         apple_music=SelectedPlaylistTracks(),
@@ -269,6 +268,7 @@ def test_selected_playlist_temper_preview_splits_tracks_by_genre_and_temper():
     assert preview["total_assignments"] == 3
 
 
+@pytest.mark.skip(reason="playlist-temper curation was removed")
 def test_playlist_temper_preview_reads_configured_sources(tmp_path):
     config_path = tmp_path / "curation_sources.json"
     config_path.write_text('{"temper_playlists": ["Morning"]}', encoding="utf-8")
@@ -284,6 +284,7 @@ def test_playlist_temper_preview_reads_configured_sources(tmp_path):
     assert preview["total_assignments"] == 2
 
 
+@pytest.mark.skip(reason="playlist-temper curation was removed")
 def test_playlist_temper_preview_uses_parallel_executor_for_multiple_playlists():
     service = CurationService(
         apple_music=SelectedPlaylistTracks(),
@@ -532,6 +533,7 @@ def test_apply_fav_songs_batched_reuses_one_preview_for_multiple_batches():
     assert second_changes[0].path[0] == "track-2"
 
 
+@pytest.mark.skip(reason="playlist-temper curation was removed")
 def test_apply_playlist_tempers_delegates_to_applier():
     applier = FakeApplier()
     service = CurationService(
@@ -595,7 +597,6 @@ def test_fav_preview_applies_store_overrides_over_auto_assignments(tmp_path):
             item_id="track-1",
             item_name="Track A",
             genre="ambient",
-            temperament=TemperBucket.WOE,
             source=AssignmentSource.MANUAL,
             confidence=1.0,
             manual_override=True,

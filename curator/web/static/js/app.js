@@ -631,8 +631,6 @@ async function confirmMove() {
 // Curation Review
 // ============================================================================
 
-const CURATION_TEMPERS = ['Woe', 'Frolic', 'Dread', 'Malice'];
-
 function hasFreshCurationSnapshot() {
     return Boolean(curationSnapshot && curationSnapshot.available && curationSnapshot.fresh);
 }
@@ -832,13 +830,9 @@ function renderCurationPreview(preview) {
 
 function groupedToMatrixRows(grouped) {
     return Object.entries(grouped || {})
-        .map(([genre, temperMap]) => {
-            const counts = {};
-            CURATION_TEMPERS.forEach(temper => {
-                counts[temper] = asArray(temperMap && temperMap[temper]).length;
-            });
-            const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
-            return { genre, counts, total, status: total > 0 ? 'ready' : 'empty' };
+        .map(([genre, assignments]) => {
+            const total = asArray(assignments).length;
+            return { genre, total, status: total > 0 ? 'ready' : 'empty' };
         })
         .sort((left, right) => right.total - left.total || left.genre.localeCompare(right.genre));
 }
@@ -957,7 +951,7 @@ function renderCurationMatrix(panel, grouped) {
     if (!allRows.length) {
         const empty = appendElement(panel, 'div', 'card curation-empty-state');
         appendElement(empty, 'h3', null, 'No Snapshot Data');
-        appendElement(empty, 'p', 'text-muted', 'Load or refresh a snapshot to review genre and temper counts.');
+        appendElement(empty, 'p', 'text-muted', 'Load or refresh a snapshot to review genre counts.');
         return;
     }
 
@@ -970,16 +964,13 @@ function renderCurationMatrix(panel, grouped) {
 
     const matrix = appendElement(panel, 'div', 'curation-matrix');
     const header = appendElement(matrix, 'div', 'curation-matrix-row curation-matrix-header');
-    ['Genre', ...CURATION_TEMPERS, 'Total / Status'].forEach(label => {
+    ['Genre', 'Tracks / Status'].forEach(label => {
         appendElement(header, 'div', null, label);
     });
 
     rows.forEach(row => {
         const rowEl = appendElement(matrix, 'div', 'curation-matrix-row');
         appendElement(rowEl, 'div', null, row.genre);
-        CURATION_TEMPERS.forEach(temper => {
-            appendElement(rowEl, 'div', null, row.counts[temper]);
-        });
         appendElement(rowEl, 'div', null, `${row.total} ${row.status}`);
     });
 }
@@ -1085,28 +1076,13 @@ function renderCurationReviewPanel(panel, groups) {
         appendElement(header, 'h3', null, group.genre);
         appendElement(header, 'span', 'curation-count-badge', group.items.length);
 
-        const grid = appendElement(section, 'div', 'curation-temper-grid');
-        CURATION_TEMPERS.forEach(temper => {
-            const column = appendElement(grid, 'div', 'curation-temper-column');
-            const columnHeader = appendElement(column, 'div', 'curation-temper-header');
-            const temperItems = group.items.filter(item => textValue(item && item.temperament) === temper);
+        group.items.forEach(item => {
+            const card = appendElement(section, 'div', 'curation-track-card');
+            const itemName = textValue((item && item.item_name) || (item && item.name), 'Unnamed track');
+            const targetPath = asArray(item && item.target_path).map(part => textValue(part)).join(' / ');
 
-            appendElement(columnHeader, 'h4', null, temper);
-            appendElement(columnHeader, 'span', 'curation-count-badge', temperItems.length);
-
-            if (!temperItems.length) {
-                appendElement(column, 'p', 'curation-empty-column', 'No tracks');
-                return;
-            }
-
-            temperItems.forEach(item => {
-                const card = appendElement(column, 'div', 'curation-track-card');
-                const itemName = textValue((item && item.item_name) || (item && item.name), 'Unnamed track');
-                const targetPath = asArray(item && item.target_path).map(part => textValue(part)).join(' / ');
-
-                appendElement(card, 'div', 'curation-track-name', itemName);
-                appendElement(card, 'div', 'curation-target-path', targetPath || 'No target path');
-            });
+            appendElement(card, 'div', 'curation-track-name', itemName);
+            appendElement(card, 'div', 'curation-target-path', targetPath || 'No target path');
         });
     });
 }

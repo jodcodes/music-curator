@@ -17,10 +17,10 @@
             <ul class="nav-menu" id="navMenu">
                 <li><a href="#" data-view="dashboard" class="nav-link active">Dashboard</a></li>
                 <li><a href="#" data-view="playlists" class="nav-link">Playlists</a></li>
-                <li><a href="#" data-view="enrich" class="nav-link">Enrich</a></li>
-                <li><a href="#" data-view="analyze" class="nav-link">Mood</a></li>
-                <li><a href="#" data-view="organize" class="nav-link">Organize</a></li>
-                <li><button type="button" class="nav-link" data-view="curation">Curate</button></li>
+                <li><a href="#" data-view="enrich" class="nav-link">Metadata</a></li>
+                <li><a href="#" data-view="analyze" class="nav-link">Mood Analysis</a></li>
+                <li><a href="#" data-view="organize" class="nav-link">Playlist Organizer</a></li>
+                <li><button type="button" class="nav-link" data-view="curation">Favorites Curator</button></li>
                 <li><a href="#" data-view="history" class="nav-link">History</a></li>
             </ul>
             <div class="nav-actions">
@@ -265,8 +265,8 @@
                     <h3>❤️ Fav Songs Curation</h3>
                     <div class="feature-explanation">
                         <p><strong>Was es tut:</strong> Sortiert die "Favourite Songs"-Liste in Genre-Subplaylists innerhalb einer "Fav Songs"-Ordnerstruktur.</p>
-                        <p><strong>Wie es funktioniert:</strong> Jeder Track aus Favourite Songs bekommt ein Genre (aus dem Track-Tag, kanonisch gemappt) und ein Temperament (Keyword-Matching: "dark/dread/night" → Dread, "sad/lonely" → Woe, "rage/hard" → Malice, sonst → Frolic). Danach wird pro Genre eine Playlist <code>♥ &lt;Genre&gt;</code> im <code>Fav Songs</code>-Ordner erstellt und der Track dorthin kopiert.</p>
-                        <p><strong>Temperament hier:</strong> Simples Keyword-Matching — <em>keine</em> KI, keine API-Kosten. (Für KI-basierte Stimmungsanalyse siehe <a href="#" onclick="showView('analyze');return false;">Mood Analysis</a>.)</p>
+                        <p><strong>Wie es funktioniert:</strong> Jeder Track aus Favourite Songs bekommt ein Genre aus dem Track-Tag, das auf eine einheitliche Genregruppe gemappt wird. Danach wird pro Genre eine Playlist <code>♥ &lt;Genre&gt;</code> im <code>Fav Songs</code>-Ordner erstellt und der Track dorthin kopiert.</p>
+                        <p><strong>Nur Genre:</strong> Curate analysiert keine Stimmung und verwendet keine KI. Für eine KI-basierte Stimmungsanalyse gibt es <a href="#" onclick="showView('analyze');return false;">Mood Analysis</a>.</p>
                         <p><strong>Safety:</strong> Preview-Modus zeigt erst was passieren würde. <code>--apply</code> führt Changes aus. Smoke-Test macht einen reversiblen Einzeltrack-Test vor dem echten Apply. Bestehende Ordner/Playlists werden wiederverwendet.</p>
                         <p class="text-muted">⚠ Nur macOS. Tracks ohne Genre-Tag gehen zu "Sonstige".</p>
                     </div>
@@ -286,7 +286,7 @@
                         <div class="control-main-header">
                             <div>
                                 <h3>Fav Songs</h3>
-                                <p class="text-muted">Genre folders with four temper playlists per genre.</p>
+                                <p class="text-muted">Eine Playlist pro Genre.</p>
                             </div>
                             <div class="curation-actions">
                                 <button class="btn btn-secondary" id="curation-load-snapshot-btn">Snapshot laden</button>
@@ -295,12 +295,9 @@
                         </div>
 
                         <div id="curation-summary" class="curation-summary"></div>
-                        <div id="curation-genre-tree" class="curation-compat-shim" aria-hidden="true"></div>
-
+                        <div id="curation-genre-tree" hidden></div>
                         <div class="matrix-toolbar">
                             <input id="curation-genre-filter" class="search-input" type="search" aria-label="Genre suchen">
-                            <button class="btn btn-secondary" id="curation-problems-only-btn" type="button">Nur Probleme</button>
-                            <button class="btn btn-secondary" id="curation-top-genres-btn" type="button">Top Genres</button>
                         </div>
 
                         <section id="curation-review-panel" class="curation-review-panel">

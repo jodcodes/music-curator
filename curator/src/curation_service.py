@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.apple_music import AppleMusicInterface
@@ -14,56 +12,24 @@ from src.curation_models import (
     AssignmentSource,
     AssignmentType,
     CurationAssignment,
-    TemperBucket,
 )
 from src.curation_snapshot import CurationSnapshotStore
 from src.curation_store import CurationStore
-from src.worker_pool import map_parallel
-
-
-class KeywordTemperClassifier:
-    def classify_track(self, track: Dict[str, Any]) -> TemperBucket:
-        text = " ".join(
-            str(track.get(field) or "")
-            for field in ("name", "title", "artist", "genre")
-        ).lower()
-
-        if any(
-            keyword in text
-            for keyword in ("dark", "dread", "night", "bass", "industrial")
-        ):
-            return TemperBucket.DREAD
-        if any(
-            keyword in text for keyword in ("sad", "lonely", "melancholy", "blue")
-        ):
-            return TemperBucket.WOE
-        if any(
-            keyword in text for keyword in ("rage", "hard", "aggressive", "drill")
-        ):
-            return TemperBucket.MALICE
-        return TemperBucket.FROLIC
-
-
 class CurationService:
     def __init__(
         self,
         apple_music: Optional[AppleMusicInterface] = None,
-        temper_classifier: Optional[KeywordTemperClassifier] = None,
         store: Optional[CurationStore] = None,
         snapshot_store: Optional[CurationSnapshotStore] = None,
         planner: Optional[AppleMusicStructurePlanner] = None,
         applier: Optional[AppleMusicStructureApplier] = None,
-        sources_config_path: Optional[str | Path] = None,
+        **_ignored: Any,
     ) -> None:
         self.apple_music = apple_music or AppleMusicInterface()
-        self.temper_classifier = temper_classifier or KeywordTemperClassifier()
         self.store = store or CurationStore()
         self.snapshot_store = snapshot_store or CurationSnapshotStore()
         self.planner = planner or AppleMusicStructurePlanner()
         self.applier = applier or AppleMusicStructureApplier()
-        self.sources_config_path = Path(
-            sources_config_path or Path("data") / "config" / "curation_sources.json"
-        )
 
     def preview_fav_songs(self) -> Dict[str, Any]:
         tracks = self.apple_music.get_favourite_tracks()
@@ -91,7 +57,6 @@ class CurationService:
                     item_id=item_id,
                     item_name=item_name,
                     genre=raw_genre.lower().replace(" ", "_"),
-                    temperament=self.temper_classifier.classify_track(track),
                     source=AssignmentSource.AUTO,
                     confidence=0.75,
                 )
@@ -107,7 +72,7 @@ class CurationService:
         changes.extend(stale_changes)
 
         assignment_dicts = [assignment.to_dict() for assignment in assignments]
-        grouped = self._group_assignments(assignment_dicts)
+        grouped = self._group_fav_assignments(assignment_dicts)
 
         return {
             "assignments": assignment_dicts,
@@ -119,94 +84,11 @@ class CurationService:
             "total_skipped": len(skipped_tracks),
         }
 
-    def preview_playlist_tempers(
-        self, playlist_names: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
-        if playlist_names is None:
-            playlist_names = self._load_temper_playlist_names()
-
-        previews = self._preview_playlist_tempers_parallel(playlist_names)
-        assignments: List[CurationAssignment] = []
-        skipped_tracks: List[Dict[str, str]] = []
-        for preview in previews:
-            assignments.extend(preview["assignments"])
-            skipped_tracks.extend(preview["skipped_tracks"])
-
-        changes = self.planner.plan_fav_tracks(assignments)
-        assignment_dicts = [assignment.to_dict() for assignment in assignments]
-
-        return {
-            "scope": "playlist_tempers",
-            "source_playlists": playlist_names,
-            "assignments": assignment_dicts,
-            "grouped": self._group_assignments(assignment_dicts),
-            "changes": [change.to_dict() for change in changes],
-            "total_assignments": len(assignments),
-            "total_changes": len(changes),
-            "skipped_tracks": skipped_tracks,
-            "total_skipped": len(skipped_tracks),
-        }
-
-    def _preview_playlist_temper_source(self, playlist_name: str) -> Dict[str, Any]:
-        tracks = self.apple_music.get_playlist_tracks(playlist_name) or []
-        assignments: List[CurationAssignment] = []
-        skipped_tracks: List[Dict[str, str]] = []
-
-        for track in tracks:
-            item_id = str(track.get("persistent_id") or track.get("id") or "").strip()
-            item_name = str(track.get("name") or track.get("title") or "Unknown Track")
-            if not item_id:
-                skipped_tracks.append(
-                    {
-                        "name": item_name,
-                        "artist": str(track.get("artist") or ""),
-                        "genre": str(track.get("genre") or ""),
-                        "source_playlist": playlist_name,
-                        "reason": "missing_stable_id",
-                    }
-                )
-                continue
-
-            raw_genre = str(track.get("genre") or "other").strip() or "other"
-            assignments.append(
-                CurationAssignment(
-                    item_type=AssignmentType.TEMPER_TRACK,
-                    item_id=item_id,
-                    item_name=item_name,
-                    genre=raw_genre.lower().replace(" ", "_"),
-                    temperament=self.temper_classifier.classify_track(track),
-                    source=AssignmentSource.AUTO,
-                    confidence=0.75,
-                )
-            )
-
-        return {
-            "playlist_name": playlist_name,
-            "assignments": assignments,
-            "skipped_tracks": skipped_tracks,
-        }
-
-    def _preview_playlist_tempers_parallel(
-        self, playlist_names: List[str]
-    ) -> List[Dict[str, Any]]:
-        pairs = map_parallel(
-            self._preview_playlist_temper_source,
-            playlist_names,
-            label="playlist_tempers",
-        )
-        return [r for _, r in pairs if not isinstance(r, Exception)]
-
     def _get_generated_fav_song_tracks(self) -> List[Dict[str, Any]]:
         getter = getattr(self.apple_music, "get_generated_fav_song_tracks", None)
         if type(self.apple_music) is not AppleMusicInterface:
             return [] if getter is None else list(getter())
         return self.apple_music.get_generated_fav_song_tracks()
-
-    def _load_temper_playlist_names(self) -> List[str]:
-        if not self.sources_config_path.is_file():
-            return []
-        data = json.loads(self.sources_config_path.read_text(encoding="utf-8"))
-        return [str(name) for name in data.get("temper_playlists", []) if str(name).strip()]
 
     def get_fav_songs_snapshot(self) -> Dict[str, Any]:
         return self.snapshot_store.load_snapshot("fav_songs")
@@ -262,18 +144,13 @@ class CurationService:
             "skipped_tracks": skipped_tracks,
         }
 
-    def _group_assignments(
+    def _group_fav_assignments(
         self, assignments: List[Dict[str, Any]]
-    ) -> Dict[str, Dict[str, List[Dict[str, Any]]]]:
-        grouped: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        grouped: Dict[str, List[Dict[str, Any]]] = {}
         for assignment in assignments:
             genre = str(assignment.get("genre_label") or "Other")
-            temperament = str(assignment.get("temperament") or TemperBucket.FROLIC.value)
-            grouped.setdefault(
-                genre,
-                {temper.value: [] for temper in TemperBucket},
-            )
-            grouped[genre].setdefault(temperament, []).append(assignment)
+            grouped.setdefault(genre, []).append(assignment)
         return grouped
 
     def apply_fav_songs(
@@ -317,7 +194,7 @@ class CurationService:
         preview = {
             **preview,
             "assignments": assignment_dicts,
-            "grouped": self._group_assignments(assignment_dicts),
+            "grouped": self._group_fav_assignments(assignment_dicts),
             "changes": [change.to_dict() for change in changes],
             "total_assignments": len(assignments),
             "total_changes": len(changes),
@@ -461,21 +338,3 @@ class CurationService:
             "total_available": total_available,
             "batches": batches,
         }
-
-    def apply_playlist_tempers(
-        self, playlist_names: Optional[List[str]] = None, confirmed: bool = False
-    ) -> Dict[str, Any]:
-        preview = self.preview_playlist_tempers(playlist_names)
-        assignments = [
-            CurationAssignment.from_dict(assignment)
-            for assignment in preview["assignments"]
-        ]
-        changes = self.planner.plan_fav_tracks(assignments)
-        preview = {
-            **preview,
-            "changes": [change.to_dict() for change in changes],
-            "total_changes": len(changes),
-        }
-        result = self.applier.apply_changes(changes, confirmed=confirmed)
-        result["preview"] = preview
-        return result

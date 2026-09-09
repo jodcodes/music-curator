@@ -317,16 +317,10 @@ def run_playlist_organization(args=None):
 
 
 def run_curation(args=None):
-    """Run curation preview/apply."""
-    print_header("Curation", "Review playlist curation structure")
+    """Preview or apply genre-based Favourite Songs curation."""
+    print_header("Favorites Curator", "Sort Favourite Songs by genre")
 
-    if not require_macos("Curation"):
-        return 1
-
-    scope = getattr(args, "scope", "fav_songs") if args else "fav_songs"
-
-    if args and getattr(args, "apply", False) and scope not in {"playlist_tempers", "fav_songs"}:
-        print(error(f"Unsupported apply scope: {scope}"))
+    if not require_macos("Favorites Curator"):
         return 1
 
     if args and getattr(args, "smoke_test", False):
@@ -345,32 +339,7 @@ def run_curation(args=None):
         print(info(f"leftovers: {result.get('leftovers', {})}"))
         return 1
 
-    if scope == "playlist_tempers":
-        playlist_names = getattr(args, "playlist", None)
-        if getattr(args, "apply", False):
-            if not getattr(args, "yes", False):
-                print(
-                    error(
-                        "Full apply is locked. Use the UI mini-test or --yes with --apply for playlist_tempers."
-                    )
-                )
-                return 1
-            from src.curation_service import CurationService
-
-            service = CurationService()
-            result = service.apply_playlist_tempers(playlist_names, confirmed=True)
-            print(success(f"Applied changes: {result.get('applied', 0)}"))
-            if result.get("failed"):
-                print(error(f"Failed changes: {result.get('failed', 0)}"))
-                return 1
-            return 0
-        from src.curation_service import CurationService
-
-        service = CurationService()
-        preview = service.preview_playlist_tempers(playlist_names)
-        item_label = "Selected playlist tracks"
-    else:
-        if getattr(args, "apply", False):
+    if args and getattr(args, "apply", False):
             if not getattr(args, "yes", False):
                 print(
                     error(
@@ -409,11 +378,12 @@ def run_curation(args=None):
                 print(error(f"Failed changes: {result.get('failed', 0)}"))
                 return 1
             return 0
-        from src.curation_service import CurationService
 
-        service = CurationService()
-        preview = service.preview_fav_songs()
-        item_label = "Favourite tracks"
+    from src.curation_service import CurationService
+
+    service = CurationService()
+    preview = service.preview_fav_songs()
+    item_label = "Favourite tracks"
 
     print(
         info(
@@ -1108,17 +1078,6 @@ def main(argv=None):
     replay_parser.add_argument("--run-id", required=True, dest="run_id", help="LibraryRun ID to replay")
 
     curate_parser = add_feature_parser("curate", "Preview/apply Favourite Songs curation")
-    curate_parser.add_argument(
-        "--scope",
-        choices=["fav_songs", "playlist_tempers"],
-        default="fav_songs",
-        help="Curation scope",
-    )
-    curate_parser.add_argument(
-        "--playlist",
-        action="append",
-        help="Source playlist name for playlist_tempers scope. Repeatable.",
-    )
     curate_parser.add_argument(
         "--apply",
         action="store_true",

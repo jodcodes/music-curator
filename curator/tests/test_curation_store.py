@@ -2,7 +2,6 @@ from src.curation_models import (
     AssignmentSource,
     AssignmentType,
     CurationAssignment,
-    TemperBucket,
 )
 from src.curation_store import CurationStore
 
@@ -24,7 +23,6 @@ def test_store_round_trips_manual_override(tmp_path):
         item_id="track-1",
         item_name="Track A",
         genre="hiphop",
-        temperament=TemperBucket.WOE,
         source=AssignmentSource.MANUAL,
         confidence=1.0,
         manual_override=True,
@@ -43,7 +41,6 @@ def test_store_merges_overrides_over_auto_assignments(tmp_path):
         item_id="track-1",
         item_name="Track A",
         genre="electronic",
-        temperament=TemperBucket.FROLIC,
         source=AssignmentSource.AUTO,
         confidence=0.7,
     )
@@ -52,7 +49,6 @@ def test_store_merges_overrides_over_auto_assignments(tmp_path):
         item_id="track-1",
         item_name="Track A",
         genre="hiphop",
-        temperament=TemperBucket.WOE,
         source=AssignmentSource.MANUAL,
         confidence=1.0,
         manual_override=True,
@@ -70,7 +66,6 @@ def test_store_apply_overrides_loads_existing_data_once(tmp_path):
         item_id="track-1",
         item_name="Track A",
         genre="hiphop",
-        temperament=TemperBucket.WOE,
         source=AssignmentSource.MANUAL,
         confidence=1.0,
         manual_override=True,
@@ -80,7 +75,6 @@ def test_store_apply_overrides_loads_existing_data_once(tmp_path):
         item_id="track-1",
         item_name="Track A",
         genre="electronic",
-        temperament=TemperBucket.FROLIC,
         source=AssignmentSource.AUTO,
         confidence=0.7,
     )
@@ -89,7 +83,6 @@ def test_store_apply_overrides_loads_existing_data_once(tmp_path):
         item_id="track-2",
         item_name="Track B",
         genre="electronic",
-        temperament=TemperBucket.DREAD,
         source=AssignmentSource.AUTO,
         confidence=0.7,
     )

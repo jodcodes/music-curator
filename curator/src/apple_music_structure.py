@@ -56,10 +56,7 @@ class AppleMusicStructurePlanner:
             changes.append(AppleMusicChange(action, path, description))
 
         for assignment in assignments:
-            if assignment.item_type not in {
-                AssignmentType.FAV_TRACK,
-                AssignmentType.TEMPER_TRACK,
-            }:
+            if assignment.item_type != AssignmentType.FAV_TRACK:
                 continue
 
             target_path = assignment.target_path()

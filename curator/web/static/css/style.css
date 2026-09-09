@@ -706,10 +706,6 @@ label {
     min-width: 0;
 }
 
-.curation-compat-shim {
-    display: none;
-}
-
 .control-main-header {
     display: flex;
     justify-content: space-between;
@@ -765,7 +761,7 @@ label {
 
 .curation-matrix-row {
     display: grid;
-    grid-template-columns: minmax(180px, 1.3fr) repeat(4, minmax(64px, 0.65fr)) minmax(80px, 0.8fr);
+    grid-template-columns: minmax(180px, 1.3fr) minmax(120px, 0.8fr);
     gap: 8px;
     align-items: center;
     padding: 12px;
@@ -863,7 +859,6 @@ label {
     align-items: start;
 }
 
-.curation-genre-tree,
 .curation-change-panel {
     position: sticky;
     top: 88px;
@@ -913,8 +908,7 @@ label {
     scroll-margin-top: 90px;
 }
 
-.curation-genre-header,
-.curation-temper-header {
+.curation-genre-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -922,29 +916,10 @@ label {
     margin-bottom: 10px;
 }
 
-.curation-genre-header h3,
-.curation-temper-header h4 {
+.curation-genre-header h3 {
     margin: 0;
     min-width: 0;
     overflow-wrap: anywhere;
-}
-
-.curation-temper-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
-}
-
-.curation-temper-column {
-    min-width: 0;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    background-color: var(--bg-page);
-    padding: 10px;
-}
-
-.curation-temper-header h4 {
-    font-size: var(--font-size-base);
 }
 
 .curation-track-card,
@@ -1137,9 +1112,6 @@ label {
         max-height: none;
     }
 
-    .curation-temper-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
 }
 
 @media (max-width: 1100px) {
@@ -1207,8 +1179,7 @@ label {
     }
 
     .curation-layout,
-    .curation-summary,
-    .curation-temper-grid {
+    .curation-summary {
         grid-template-columns: 1fr;
     }
 
@@ -1221,18 +1192,9 @@ label {
     }
 
     .curation-matrix-row {
-        min-width: 680px;
+        min-width: 320px;
     }
 
-    .curation-genre-tree {
-        position: static;
-        max-height: none;
-    }
-
-    .curation-genre-list {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
 
     .table {
         font-size: 12px;
