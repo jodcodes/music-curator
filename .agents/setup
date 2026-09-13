@@ -26,4 +26,8 @@ step "Installing Python development dependencies" \
   -r apple2spfy/requirements.txt \
   -r spfy2apple/requirements.txt
 
+command -v npm >/dev/null || { echo 'npm is required for Pitch2play.' >&2; exit 1; }
+step "Installing Pitch2play Node.js dependencies" \
+  npm --prefix "$repo_root/pitch2play" ci --no-audit --no-fund
+
 printf 'Orb setup complete: %s\n' "$venv"

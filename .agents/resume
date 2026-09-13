@@ -9,4 +9,10 @@ if [[ ! -x "$venv/bin/python" ]]; then
   exit 1
 fi
 
-printf 'Orb Python environment is ready: %s\n' "$venv"
+if [[ ! -x "$repo_root/pitch2play/node_modules/.bin/vitest" \
+  || ! -x "$repo_root/pitch2play/node_modules/.bin/eslint" ]]; then
+  printf 'Pitch2play dependencies are missing; run .agents/setup.\n' >&2
+  exit 1
+fi
+
+printf 'Orb workspace is ready.\n'

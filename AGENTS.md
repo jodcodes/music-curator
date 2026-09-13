@@ -13,6 +13,6 @@ This monorepo contains independent Apple Music and Spotify tools. Keep changes w
 
 - Root smoke test: `python3 music_curator.py --list`.
 - Curator safe tests: from `curator/`, run the focused pytest file for the change; CI's safe set is documented in `.github/workflows/ci.yml`.
-- Apple-to-Spotify tests: `python3 -m pytest apple2spfy/tests`.
+- Apple-to-Spotify tests: `.venv/bin/python -m pytest apple2spfy/tests`.
 - Pitch2play: from `pitch2play/`, run `npm test` and `npm run lint`.
 - Music-tools tests: run the relevant files under `music_tools/tests/` without invoking `music_tools/bin/run_all.sh`.

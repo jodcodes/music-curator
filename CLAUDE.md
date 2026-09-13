@@ -1,1 +1,1 @@
-Read `AGENTS.md` before changing this repository.
+@AGENTS.md
