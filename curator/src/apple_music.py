@@ -222,6 +222,75 @@ end tell
         selector = self._playlist_by_id_script(playlist_id)
         return self._read_playlist_tracks(selector, strict=True) or []
 
+    _COVER_SIGNATURES = ((b"\x89PNG\r\n\x1a\n", "PNG"), (b"\xff\xd8\xff", "JPEG"))
+    _MAX_COVER_BYTES = 20 * 1024 * 1024
+
+    @classmethod
+    def _cover_image(cls, image_path) -> Dict[str, str]:
+        path = Path(image_path)
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("Cover image must be a regular file")
+        size = path.stat().st_size
+        if not 0 < size <= cls._MAX_COVER_BYTES:
+            raise ValueError("Cover image must be between 1 byte and 20 MB")
+        with path.open("rb") as stream:
+            header = stream.read(8)
+        for signature, image_format in cls._COVER_SIGNATURES:
+            if header.startswith(signature):
+                return {"path": str(path.resolve()), "format": image_format, "size": size}
+        raise ValueError("Cover image must be a PNG or JPEG file")
+
+    def get_playlist_artwork_count_by_id(self, playlist_id: str) -> int:
+        """Read-only artwork count for an ordinary playlist; raise on a failed read."""
+        selector = self._playlist_by_id_script(playlist_id)
+        script = f'''
+tell application "Music"
+{selector}
+    return (count of artworks of targetPlaylist) as text
+end tell
+'''
+        success, output = self._run_applescript(script)
+        if not success or not re.fullmatch(r"[0-9]+", output):
+            raise RuntimeError(f"Failed to read playlist artwork for {playlist_id}: {output}")
+        return int(output)
+
+    def build_playlist_cover_script(self, playlist_id: str, image_path) -> Tuple[str, Dict[str, str]]:
+        """Build a cover-replacement script; validation only, never reads or writes Music."""
+        image = self._cover_image(image_path)
+        selector = self._playlist_by_id_script(playlist_id, writable=True)
+        picture_class = "«class PNGf»" if image["format"] == "PNG" else "«class JPEG»"
+        script = f'''
+tell application "Music"
+{selector}
+    set coverData to (read (POSIX file "{self._escape_applescript_string(image["path"])}") as {picture_class})
+    set createdArtwork to make new artwork at end of artworks of targetPlaylist with properties {{data: coverData}}
+    set createdID to persistent ID of createdArtwork
+    if createdID is not in (persistent ID of every artwork of targetPlaylist) then error "New playlist artwork is not verifiable"
+    repeat with oldArtwork in artworks of targetPlaylist
+        if (persistent ID of oldArtwork) is not createdID then delete oldArtwork
+    end repeat
+    if (count of artworks of targetPlaylist) is not 1 then error "Playlist artwork replacement is not verifiable"
+    return createdID
+end tell
+'''
+        return script, image
+
+    def set_playlist_cover_by_id(self, playlist_id: str, image_path) -> Dict[str, str]:
+        """Create the validated cover, verify its ID, then remove older artwork.
+
+        Any failure is uncertain: a new artwork or extra artwork may already exist,
+        so callers must inspect Music and must not retry blindly.
+        """
+        script, image = self.build_playlist_cover_script(playlist_id, image_path)
+        success, output = self._run_applescript(script)
+        if not success:
+            raise RuntimeError(f"Playlist cover write failed or is uncertain: {output}")
+        try:
+            created_id = self._validate_persistent_id(output)
+        except ValueError as exc:
+            raise RuntimeError(f"Playlist cover result is not verifiable: {output}") from exc
+        return {**image, "playlist_id": playlist_id.upper(), "created_artwork_id": created_id}
+
     def create_playlist(self, playlist_name: str) -> str:
         """Create a fresh playlist, even for a duplicate name, and return its persistent ID.
 

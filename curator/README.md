@@ -272,6 +272,26 @@ and an Apple Music profile, with audience/account restrictions reviewed first.
 See [the evidence and manual steps](docs/playlist-presentation.md). This command
 does not publish anything or accept `--apply`.
 
+### Preview and apply one playlist cover
+
+```bash
+# Read-only preview: validates the image, then reads name and artwork count.
+curator playlist-cover --playlist-id 0123456789ABCDEF --image cover.png
+
+# Replace the cover once, after reviewing the preview.
+curator playlist-cover --playlist-id 0123456789ABCDEF --image cover.png --apply --yes
+```
+
+The image must be a regular PNG or JPEG file of at most 20 MB; symlinks are
+rejected. Preview prints the resolved path, format, size, SHA-256, playlist name
+and current artwork count, and changes nothing. Apply uses only the installed
+`artwork` vocabulary: it creates one artwork, verifies its persistent ID,
+deletes every other artwork and requires exactly one to remain. This path has
+not been accepted against a live library, so treat any failure as uncertain — a
+new or extra artwork may already exist. Inspect Music and do not retry blindly.
+Cover replacement and public sharing stay separate; this command never changes
+sharing, publishes, or prints a public URL.
+
 ## How it works
 
 ```

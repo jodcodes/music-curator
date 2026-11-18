@@ -24,6 +24,7 @@ Usage:
 import sys
 import os
 import argparse
+import hashlib
 import json
 from collections import Counter
 from pathlib import Path
@@ -118,6 +119,47 @@ def show_playlist_presentation(args=None):
                 print(f"  {field}: {value}")
     print("Evidence and manual guide: docs/playlist-presentation.md")
     return 0
+
+
+def run_playlist_cover(args=None):
+    """Preview or confirm one playlist cover replacement by stable playlist ID."""
+    playlist_id = getattr(args, "playlist_id", None)
+    image = getattr(args, "image", None)
+    apply = getattr(args, "apply", False)
+    confirmed = getattr(args, "yes", False)
+    if not playlist_id or not image or (apply and not confirmed) or (confirmed and not apply):
+        print(error("Preview requires --playlist-id ID --image PATH. Apply separately with --apply --yes."))
+        return 1
+    if not require_macos("Playlist cover"):
+        return 1
+    try:
+        music = AppleMusicInterface()
+        if apply:
+            print(warning("Applying once. Inspect Music after any uncertain result; do not retry blindly."))
+            result = music.set_playlist_cover_by_id(playlist_id, image)
+            print(json.dumps({**result, "applied": True}, ensure_ascii=False, indent=2))
+            return 0
+
+        cover = music._cover_image(image)
+        digest = hashlib.sha256()
+        with open(cover["path"], "rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        playlist = music.get_playlist_info_by_id(playlist_id)
+        count = music.get_playlist_artwork_count_by_id(playlist_id)
+        print(json.dumps({
+            "playlist_id": playlist["persistent_id"],
+            "playlist_name": playlist["name"],
+            "image": {**cover, "sha256": digest.hexdigest()},
+            "existing_artwork_count": count,
+            "planned": "replace",
+            "applied": False,
+        }, ensure_ascii=False, indent=2))
+        print(info("Preview only; no artwork changed. Apply with --apply --yes after review."))
+        return 0
+    except Exception as exc:
+        print(error(f"Playlist cover failed: {exc}"))
+        return 1
 
 
 def run_localize(args=None):
@@ -1183,6 +1225,11 @@ def main(argv=None):
     organize_parser.add_argument("--apply", action="store_true", help="Apply only the saved plan; requires --yes")
     organize_parser.add_argument("--yes", action="store_true", help="Explicitly confirm applying the saved plan")
     add_feature_parser("playlist-presentation", "Show offline cover/sharing guidance (no Music access or writes)")
+    cover_parser = add_feature_parser("playlist-cover", "Preview or apply one playlist cover by ID (PNG/JPEG)")
+    cover_parser.add_argument("--playlist-id", required=True, help="Exact playlist persistent ID")
+    cover_parser.add_argument("--image", required=True, help="PNG or JPEG cover file")
+    cover_parser.add_argument("--apply", action="store_true", help="Replace the playlist cover; requires --yes")
+    cover_parser.add_argument("--yes", action="store_true", help="Explicitly confirm the cover replacement")
 
     localize_parser = add_feature_parser(
         "localize", "Preview/apply local replacements for unavailable playlist tracks"
@@ -1344,6 +1391,8 @@ def main(argv=None):
         return run_playlist_organization(args)
     elif args.feature == "playlist-presentation":
         return show_playlist_presentation(args)
+    elif args.feature == "playlist-cover":
+        return run_playlist_cover(args)
     elif args.feature == "localize":
         return run_localize(args)
     elif args.feature == "split":

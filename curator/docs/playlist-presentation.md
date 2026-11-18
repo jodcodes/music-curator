@@ -34,9 +34,10 @@ M10 exposes this static assessment through
 sharing also reports `visibility: unknown` and no public URL. They do not probe
 the installed dictionary, launch Music, inspect library/account state, or write
 anything. `manual` means documented instructions, not verified availability for
-the current account. No setter or cover-to-playlist mapping is provided. Do not
-classify automation as supported merely because a property is present, writable
-in the dictionary, or succeeds for a track.
+the current account. The presentation command itself provides no setter and no
+cover-to-playlist mapping. Do not classify automation as supported merely
+because a property is present, writable in the dictionary, or succeeds for a
+track.
 
 ## Manual cover workflow
 
@@ -52,6 +53,22 @@ been explicitly authorized:
 Apple documents this separately from Song → Get Info → Artwork, which edits
 song artwork. These are instructions for a later manual action, not steps run
 during this assessment. See [Add artwork to content in Music on Mac](https://support.apple.com/en-mt/guide/music/mus1c6803257/mac).
+
+## Local cover automation (implemented, unverified)
+
+`curator playlist-cover --playlist-id ID --image PATH` previews a replacement
+from the dictionary declarations above: it validates the PNG/JPEG file, reads
+the playlist name and artwork count, and prints a SHA-256 of the image without
+changing anything. `--apply --yes` then runs one script that creates an
+artwork, verifies its persistent ID, deletes older artwork and requires exactly
+one artwork to remain.
+
+This is a deterministic local plan, not live acceptance. It has not been run
+against a real library, so runtime behavior, crop, persistence and cloud
+propagation stay unknown. Any nonzero result is uncertain: a new or extra
+artwork may already exist, so inspect the playlist in Music and do not retry
+blindly. Sharing and public visibility are untouched; a cover write is not a
+publication and does not produce a public URL.
 
 ## Manual sharing workflow and prerequisites
 
