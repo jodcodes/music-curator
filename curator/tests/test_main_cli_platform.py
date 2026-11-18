@@ -6,9 +6,11 @@ invoked on non-macOS platforms.
 """
 
 import os
+import json
 import subprocess
 import sys
 from io import StringIO
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -310,18 +312,14 @@ def test_curation_apply_without_feature_is_rejected(monkeypatch):
     assert exc.value.code != 0
 
 
-def test_curation_apply_on_other_feature_is_rejected(monkeypatch):
+def test_organization_apply_without_saved_plan_is_rejected(monkeypatch):
     import main
 
-    def fail_organization():
-        raise AssertionError("organize should not run with curation-only flags")
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Missing reviewed plan must be rejected before platform/service access")
 
-    monkeypatch.setattr(main, "run_playlist_organization", fail_organization)
-
-    with pytest.raises(SystemExit) as exc:
-        main.main(["organize", "--apply"])
-
-    assert exc.value.code != 0
+    monkeypatch.setattr(main, "require_macos", forbidden)
+    assert main.main(["organize", "--apply"]) == 1
 
 
 def test_run_curation_dry_run_previews_without_apply(monkeypatch, capsys):
@@ -783,3 +781,393 @@ class TestReplayCommand:
 
         from types import SimpleNamespace
         assert main.run_replay(SimpleNamespace(run_id=run_id)) == 1
+
+
+@pytest.fixture
+def split_cli(monkeypatch, tmp_path):
+    import main
+    import src.curation_service as service_module
+
+    source_id = "0000000000000001"
+
+    class FakeSplitMusic:
+        def __init__(self):
+            self.playlists = {
+                source_id: {"name": "Mix", "tracks": [f"{10 + i % 5:016X}" for i in range(101)]},
+                "0000000000000002": {"name": "Short", "tracks": []},
+            }
+            self.writes = []
+            self.fail_create = False
+
+        def get_playlist_info_by_id(self, playlist_id):
+            return {"persistent_id": playlist_id, "name": self.playlists[playlist_id]["name"]}
+
+        def get_playlist_tracks_by_id(self, playlist_id):
+            return [{"persistent_id": item} for item in self.playlists[playlist_id]["tracks"]]
+
+        def create_playlist(self, name):
+            playlist_id = f"{100 + len(self.playlists):016X}"
+            self.playlists[playlist_id] = {"name": name, "tracks": []}
+            self.writes.append(("create", playlist_id))
+            if self.fail_create:
+                raise TimeoutError("create response lost")
+            return playlist_id
+
+        def add_library_track_to_playlist_by_id(self, playlist_id, track_id):
+            self.playlists[playlist_id]["tracks"].append(track_id)
+            self.writes.append(("add", playlist_id, track_id))
+            return True
+
+    music = FakeSplitMusic()
+    services = []
+    service_class = service_module.CurationService
+    journal = tmp_path / "split-journal"
+
+    def create_service():
+        service = service_class(apple_music=music, split_journal_path=journal)
+        services.append(service)
+        return service
+
+    monkeypatch.setattr(service_module, "CurationService", create_service)
+    monkeypatch.setattr(main, "IS_MACOS", True)
+    return SimpleNamespace(main=main, music=music, services=services, journal=journal,
+                           source_id=source_id, plan_path=tmp_path / "reviewed.json")
+
+
+def test_split_cli_default_preview_is_read_only_and_requires_explicit_ids(split_cli, capsys):
+    cli = split_cli
+    assert cli.main.main(["split"]) == 1
+    assert cli.services == []
+    assert cli.main.main(["split", "--playlist-id", cli.source_id,
+                          "--playlist-id", "0000000000000002"]) == 0
+    output = capsys.readouterr().out
+    assert cli.source_id in output and "Mix" in output
+    assert output.index("Mix · 01") < output.index("Mix · 02")
+    assert "51" in output and "50" in output
+    assert "within_limit" in output
+    assert "Source playlists are retained" in output
+    assert cli.music.writes == []
+    assert not cli.journal.exists()
+    assert not cli.plan_path.exists()
+
+
+def test_split_cli_saved_plan_is_exact_and_apply_retries_across_invocations(split_cli, monkeypatch, tmp_path):
+    cli = split_cli
+    assert cli.main.main(["split", "--playlist-id", cli.source_id,
+                          "--save-plan", str(cli.plan_path)]) == 0
+    plan = json.loads(cli.plan_path.read_text())
+    assert plan == cli.services[0].preview_playlist_splits([cli.source_id])
+    assert cli.main.main(["split", "--init-journal"]) == 0
+    original_apply = type(cli.services[0]).apply_playlist_splits
+    applied = []
+
+    def record_apply(service, submitted, confirmed=False):
+        applied.append((submitted, confirmed))
+        return original_apply(service, submitted, confirmed=confirmed)
+
+    monkeypatch.setattr(type(cli.services[0]), "apply_playlist_splits", record_apply)
+    args = ["split", "--plan", str(cli.plan_path), "--apply", "--yes"]
+    assert cli.main.main(args) == 0
+    assert applied == [(plan, True)]
+    writes = list(cli.music.writes)
+    assert len(writes) == 103
+    monkeypatch.chdir(tmp_path)
+    assert cli.main.main(args) == 0
+    assert cli.music.writes == writes
+    assert len(cli.services) == 4
+    assert cli.music.playlists[cli.source_id]["tracks"] == plan["sources"][0]["track_ids"]
+
+
+@pytest.mark.parametrize("args", [
+    ["--apply"], ["--apply", "--yes"], ["--yes"],
+    ["--plan", "missing.json"], ["--plan", "missing.json", "--apply"],
+    ["--playlist-id", "0000000000000001", "--apply", "--yes"],
+    ["--init-journal", "--playlist-id", "0000000000000001"],
+    ["--init-journal", "--apply", "--yes"],
+    ["--save-plan", "missing.json"],
+])
+def test_split_cli_rejects_incomplete_or_mixed_actions_before_service(split_cli, args):
+    cli = split_cli
+    assert cli.main.main(["split", *args]) == 1
+    assert cli.services == []
+    assert cli.music.writes == []
+    assert not cli.journal.exists()
+
+
+@pytest.mark.parametrize("payload", [None, "{broken", "[]", "{}", '{"version": 1}'])
+def test_split_cli_invalid_plan_never_writes(split_cli, payload):
+    cli = split_cli
+    if payload is not None:
+        cli.plan_path.write_text(payload)
+    assert cli.main.main(["split", "--plan", str(cli.plan_path), "--apply", "--yes"]) == 1
+    assert cli.music.writes == []
+    assert not cli.journal.exists()
+
+
+@pytest.mark.parametrize("state", ["missing", "uninitialized", "corrupt"])
+def test_split_cli_never_initializes_journal_on_apply(split_cli, state):
+    cli = split_cli
+    assert cli.main.main(["split", "--playlist-id", cli.source_id,
+                          "--save-plan", str(cli.plan_path)]) == 0
+    if state == "uninitialized":
+        cli.journal.mkdir()
+    elif state == "corrupt":
+        assert cli.main.main(["split", "--init-journal"]) == 0
+        (cli.journal / "journal.json").write_text("{broken")
+    before = {p.name: p.read_bytes() for p in cli.journal.iterdir()} if cli.journal.exists() else None
+    assert cli.main.main(["split", "--plan", str(cli.plan_path), "--apply", "--yes"]) == 1
+    after = {p.name: p.read_bytes() for p in cli.journal.iterdir()} if cli.journal.exists() else None
+    assert before == after
+    assert cli.music.writes == []
+
+
+def test_split_cli_init_is_explicit_local_only_and_never_resets(split_cli, capsys):
+    cli = split_cli
+    cli.main.IS_MACOS = False
+    assert cli.main.main(["split", "--init-journal"]) == 0
+    before = (cli.journal / "journal.json").read_bytes()
+    assert cli.main.main(["split", "--init-journal"]) == 1
+    assert (cli.journal / "journal.json").read_bytes() == before
+    assert cli.music.writes == []
+    assert "never" in capsys.readouterr().out.lower()
+
+
+def test_split_cli_reports_unresolved_operation_and_durable_status(split_cli, capsys):
+    cli = split_cli
+    assert cli.main.main(["split", "--playlist-id", cli.source_id,
+                          "--save-plan", str(cli.plan_path)]) == 0
+    fingerprint = json.loads(cli.plan_path.read_text())["fingerprint"]
+    assert cli.main.main(["split", "--init-journal"]) == 0
+    cli.music.fail_create = True
+    args = ["split", "--plan", str(cli.plan_path), "--apply", "--yes"]
+    assert cli.main.main(args) == 1
+    writes = list(cli.music.writes)
+    capsys.readouterr()
+    assert cli.main.main(args) == 1
+    output = capsys.readouterr().out
+    assert "unresolved" in output.lower() and "create" in output
+    assert fingerprint in output and cli.source_id in output
+    assert "Mix · 01" in output and "not_started" in output
+    assert "confirmed" in output and "unknown" in output
+    assert "manual" in output.lower()
+    assert cli.music.writes == writes
+
+
+def test_split_cli_plan_export_refuses_overwrite(split_cli):
+    cli = split_cli
+    cli.plan_path.write_text("prior reviewed plan")
+    assert cli.main.main(["split", "--playlist-id", cli.source_id,
+                          "--save-plan", str(cli.plan_path)]) == 1
+    assert cli.plan_path.read_text() == "prior reviewed plan"
+    assert cli.music.writes == []
+
+
+def test_split_cli_plan_export_is_private_under_default_umask(split_cli):
+    cli = split_cli
+    previous_umask = os.umask(0o022)
+    try:
+        assert cli.main.main(["split", "--playlist-id", cli.source_id,
+                              "--save-plan", str(cli.plan_path)]) == 0
+    finally:
+        os.umask(previous_umask)
+    assert cli.plan_path.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize("relative_path", [
+    "curator/data/curation/playlist_split_reviews/split-review.json",
+    "curator/data/curation/playlist_split_journal/journal.json",
+])
+def test_split_cli_private_artifact_locations_are_git_ignored(relative_path):
+    result = subprocess.run(
+        ["git", "check-ignore", "-v", "--no-index", relative_path],
+        cwd=Path(__file__).resolve().parents[2], capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert relative_path in result.stdout
+
+
+def test_split_cli_platform_guard_precedes_service(split_cli):
+    cli = split_cli
+    cli.main.IS_MACOS = False
+    assert cli.main.main(["split", "--playlist-id", cli.source_id]) == 1
+    assert cli.services == []
+
+
+def test_split_cli_saved_plan_without_consent_never_constructs_service(split_cli):
+    cli = split_cli
+    assert cli.main.main(["split", "--playlist-id", cli.source_id,
+                          "--save-plan", str(cli.plan_path)]) == 0
+    services = list(cli.services)
+    assert cli.main.main(["split", "--plan", str(cli.plan_path), "--apply"]) == 1
+    assert cli.services == services
+    assert cli.music.writes == []
+    assert not cli.journal.exists()
+
+
+def test_split_cli_stale_saved_plan_is_rejected_without_recalculating_approval(split_cli, capsys):
+    cli = split_cli
+    assert cli.main.main(["split", "--playlist-id", cli.source_id,
+                          "--save-plan", str(cli.plan_path)]) == 0
+    plan_bytes = cli.plan_path.read_bytes()
+    assert cli.main.main(["split", "--init-journal"]) == 0
+    journal_bytes = (cli.journal / "journal.json").read_bytes()
+    cli.music.playlists[cli.source_id]["tracks"].reverse()
+    assert cli.main.main(["split", "--plan", str(cli.plan_path), "--apply", "--yes"]) == 1
+    assert "Source changed" in capsys.readouterr().out
+    assert cli.plan_path.read_bytes() == plan_bytes
+    assert (cli.journal / "journal.json").read_bytes() == journal_bytes
+    assert cli.music.writes == []
+
+
+@pytest.fixture
+def seed_cli(tmp_path, monkeypatch):
+    import main
+    import src.curation_service as module
+    from tests.test_curation_service import SeedMusic, SOURCE_ID
+
+    music = SeedMusic()
+    services = []
+    service_class = module.CurationService
+    journal = tmp_path / "shared-journal"
+
+    def create_service():
+        service = service_class(apple_music=music, split_journal_path=journal)
+        services.append(service)
+        return service
+
+    monkeypatch.setattr(module, "CurationService", create_service)
+    monkeypatch.setattr(main, "IS_MACOS", True)
+    return SimpleNamespace(main=main, music=music, services=services, journal=journal,
+                           source_id=SOURCE_ID, seed_id="000000000000000A",
+                           plan_path=tmp_path / "seed-review.json")
+
+
+def seed_cli_preview(cli, *extra):
+    return cli.main.main(["seed-playlist", "--playlist-id", cli.source_id,
+                          "--seed-track-id", cli.seed_id, *extra])
+
+
+def test_seed_cli_preview_displays_identity_ranking_and_writes_nothing(seed_cli, capsys):
+    cli = seed_cli
+    assert seed_cli_preview(cli) == 0
+    output = capsys.readouterr().out
+    for expected in [cli.source_id, "Same", cli.seed_id, "Song 10", "Artist",
+                     "existing_library", "recorded_metadata_only", "selected_seed",
+                     "missing_recorded_mood", "genre_only_fallback"]:
+        assert expected in output
+    assert cli.music.writes == []
+    assert not cli.journal.exists() and not cli.plan_path.exists()
+
+
+@pytest.mark.parametrize("args", [
+    [], ["--playlist-id", "0000000000000001"], ["--seed-track-id", "000000000000000A"],
+    ["--apply"], ["--yes"], ["--plan", "missing"],
+    ["--plan", "missing", "--apply"],
+    ["--init-journal", "--seed-track-id", "000000000000000A"],
+    ["--init-journal", "--limit", "30"],
+    ["--plan", "missing", "--apply", "--yes", "--limit", "30"],
+    ["--playlist-id", "0000000000000001", "--seed-track-id", "000000000000000A", "--yes"],
+])
+def test_seed_cli_rejects_mixed_actions_before_service(seed_cli, args):
+    assert seed_cli.main.main(["seed-playlist", *args]) == 1
+    assert seed_cli.services == [] and seed_cli.music.writes == []
+
+
+@pytest.mark.parametrize("source,seed,limit", [
+    ("bad", "000000000000000A", "30"),
+    ("0000000000000001", "bad", "30"),
+    ("0000000000000001", "0000000000000099", "30"),
+    ("0000000000000099", "000000000000000A", "30"),
+    ("0000000000000001", "000000000000000A", "0"),
+    ("0000000000000001", "000000000000000A", "31"),
+])
+def test_seed_cli_invalid_selection_never_writes(seed_cli, source, seed, limit):
+    assert seed_cli.main.main(["seed-playlist", "--playlist-id", source,
+                              "--seed-track-id", seed, "--limit", limit]) == 1
+    assert seed_cli.music.writes == [] and not seed_cli.journal.exists()
+
+
+def test_seed_cli_private_exact_roundtrip_and_completed_retry(seed_cli, monkeypatch, tmp_path):
+    cli = seed_cli
+    previous = os.umask(0o022)
+    try:
+        assert seed_cli_preview(cli, "--save-plan", str(cli.plan_path), "--limit", "3") == 0
+    finally:
+        os.umask(previous)
+    plan = json.loads(cli.plan_path.read_text())
+    assert cli.plan_path.stat().st_mode & 0o777 == 0o600
+    assert plan == cli.services[0].preview_seed_playlist(cli.source_id, cli.seed_id, 3)
+    plan_bytes = cli.plan_path.read_bytes()
+    assert seed_cli_preview(cli, "--save-plan", str(cli.plan_path)) == 1
+    assert cli.plan_path.read_bytes() == plan_bytes
+    assert cli.main.main(["seed-playlist", "--plan", str(cli.plan_path), "--apply"]) == 1
+    assert cli.music.writes == []
+    cli.main.IS_MACOS = False
+    assert cli.main.main(["seed-playlist", "--init-journal"]) == 0
+    before = (cli.journal / "journal.json").read_bytes()
+    assert cli.main.main(["seed-playlist", "--init-journal"]) == 1
+    assert (cli.journal / "journal.json").read_bytes() == before
+    cli.main.IS_MACOS = True
+    original_apply = type(cli.services[0]).apply_seed_playlist
+    submitted = []
+
+    def apply(service, reviewed, confirmed=False):
+        submitted.append((reviewed, confirmed))
+        return original_apply(service, reviewed, confirmed=confirmed)
+
+    monkeypatch.setattr(type(cli.services[0]), "apply_seed_playlist", apply)
+    args = ["seed-playlist", "--plan", str(cli.plan_path), "--apply", "--yes"]
+    assert cli.main.main(args) == 0
+    assert submitted == [(plan, True)]
+    assert len(cli.music.writes) == 4
+    writes = list(cli.music.writes)
+    monkeypatch.chdir(tmp_path)
+    assert cli.main.main(args) == 0
+    assert cli.music.writes == writes
+    assert cli.music.playlists[cli.source_id]["tracks"] == plan["source"]["track_ids"]
+
+
+@pytest.mark.parametrize("state", ["missing", "corrupt", "stale", "tampered", "unresolved"])
+def test_seed_cli_apply_failures_preserve_provenance(seed_cli, state, capsys):
+    cli = seed_cli
+    assert seed_cli_preview(cli, "--save-plan", str(cli.plan_path)) == 0
+    if state != "missing":
+        assert cli.main.main(["seed-playlist", "--init-journal"]) == 0
+    if state == "corrupt":
+        (cli.journal / "journal.json").write_text("{bad")
+    elif state == "stale":
+        cli.music.playlists[cli.source_id]["tracks"].reverse()
+    elif state == "tampered":
+        plan = json.loads(cli.plan_path.read_text())
+        plan["fingerprint"] = "bad"
+        cli.plan_path.write_text(json.dumps(plan))
+    elif state == "unresolved":
+        cli.music.fail_create = True
+    before = (cli.journal / "journal.json").read_bytes() if cli.journal.exists() else None
+    args = ["seed-playlist", "--plan", str(cli.plan_path), "--apply", "--yes"]
+    assert cli.main.main(args) == 1
+    if state == "unresolved":
+        writes = list(cli.music.writes)
+        assert cli.main.main(args) == 1
+        output = capsys.readouterr().out
+        assert "Unresolved operation" in output and "create" in output and "manual" in output
+        assert "confirmed occurrences=0" in output and "target=unknown" in output
+        assert cli.music.writes == writes
+    else:
+        assert cli.music.writes == []
+        assert ((cli.journal / "journal.json").read_bytes() if cli.journal.exists() else None) == before
+
+
+@pytest.mark.parametrize("payload", [None, "{bad", "[]", "{}", '{"kind":"split"}'])
+def test_seed_cli_invalid_saved_plan_never_writes(seed_cli, payload):
+    cli = seed_cli
+    if payload is not None:
+        cli.plan_path.write_text(payload)
+    assert cli.main.main(["seed-playlist", "--plan", str(cli.plan_path), "--apply", "--yes"]) == 1
+    assert cli.music.writes == [] and not cli.journal.exists()
+
+
+def test_seed_cli_platform_guard_before_service(seed_cli):
+    seed_cli.main.IS_MACOS = False
+    assert seed_cli_preview(seed_cli) == 1
+    assert seed_cli.services == []

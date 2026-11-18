@@ -40,6 +40,8 @@ logs/
 cache/
 state/
 data/curation_snapshots.json
+/curator/data/curation/playlist_split_journal/
+/curator/data/curation/playlist_split_reviews/
 temperament_analysis_results.json
 results.json
 *.csv

@@ -17,6 +17,7 @@
             <ul class="nav-menu" id="navMenu">
                 <li><a href="#" data-view="dashboard" class="nav-link active">Dashboard</a></li>
                 <li><a href="#" data-view="playlists" class="nav-link">Playlists</a></li>
+                <li><button type="button" data-view="playlist-plans" class="nav-link">Seed &amp; Split</button></li>
                 <li><a href="#" data-view="enrich" class="nav-link">Metadata</a></li>
                 <li><a href="#" data-view="analyze" class="nav-link">Mood Analysis</a></li>
                 <li><a href="#" data-view="organize" class="nav-link">Playlist Organizer</a></li>
@@ -117,6 +118,56 @@
                             <tr><td colspan="5" class="text-center text-muted">Loading playlists...</td></tr>
                         </tbody>
                     </table>
+                </div>
+            </section>
+
+            <section id="playlist-plans" class="view">
+                <div class="card">
+                    <h3>Seed &amp; Split Playlists</h3>
+                    <p>Preview only until you explicitly confirm. Sources remain unchanged. Seed ranking uses recorded mood and genre, not acoustic similarity.</p>
+                    <p>Applying creates playlists in Apple Music. The shared journal must first be initialized locally using the CLI. This page cannot initialize or reset it.</p>
+                    <button type="button" id="planLoadSources" class="btn btn-secondary">Load sources (read-only)</button>
+                    <div class="form-group">
+                        <label for="planKind">Plan type</label>
+                        <select id="planKind" class="form-control">
+                            <option value="seed">Seed playlist (up to 30 tracks)</option>
+                            <option value="split">Balanced split (up to 100 tracks per part)</option>
+                        </select>
+                    </div>
+                    <fieldset id="planSeedFields">
+                        <legend>Choose a seed from a source playlist</legend>
+                        <div class="form-group">
+                            <label for="planSource">Source playlist</label>
+                            <select id="planSource" class="form-control" disabled></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="planSeed">Seed track</label>
+                            <select id="planSeed" class="form-control" disabled></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="planLimit">Maximum tracks including seed (1–30)</label>
+                            <input id="planLimit" class="form-control" type="number" min="1" max="30" value="30" required>
+                        </div>
+                    </fieldset>
+                    <fieldset id="planSplitFields" hidden disabled>
+                        <legend>Choose playlists to split</legend>
+                        <label for="planSources">Source playlists (Ctrl/Cmd for multiple)</label>
+                        <select id="planSources" class="form-control" multiple size="6"></select>
+                    </fieldset>
+                    <button type="button" id="planPreviewButton" class="btn btn-primary" disabled>Preview exact plan</button>
+                    <p id="planStatus" role="status" aria-live="polite">Load sources to begin.</p>
+                </div>
+                <div class="card" id="planReview" hidden>
+                    <h3>Review exact plan</h3>
+                    <p>Plan expires after 15 minutes. Changing a selection invalidates this review. Inspect the exact ordered track IDs below.</p>
+                    <pre id="planDetails" class="plan-json" tabindex="0" aria-label="Exact playlist plan"></pre>
+                    <label><input id="planConfirmed" type="checkbox"> I reviewed this exact plan and authorize creating its playlists in Apple Music.</label>
+                    <button type="button" id="planApplyButton" class="btn btn-primary" disabled>Apply reviewed plan once</button>
+                </div>
+                <div class="card" id="planResult" hidden>
+                    <h3>Apply report</h3>
+                    <p>Never retry an uncertain write. Inspect the journal and Music manually if the report is partial or unresolved.</p>
+                    <pre id="planReport" class="plan-json" tabindex="0" aria-label="Playlist apply report"></pre>
                 </div>
             </section>
 
@@ -222,7 +273,14 @@
                         ⓘ Playlist organization requires macOS. Metadata enrichment is available on all platforms.
                     </div>
 
+                    <p>Only explicitly selected persistent IDs are previewed. Recorded metadata is classified locally; no provider enrichment runs here.</p>
+                    <button type="button" class="btn btn-secondary" id="organizationLoadSources">Load sources (read-only)</button>
+                    <div class="form-group">
+                        <label for="organizationSources">Source playlists (Ctrl/Cmd for multiple)</label>
+                        <select id="organizationSources" class="form-control" multiple size="6"></select>
+                    </div>
                     <button class="btn btn-primary btn-lg" id="reviewChangesBtn" disabled>Review Changes</button>
+                    <p id="organizationStatus" role="status" aria-live="polite">Load sources to begin.</p>
                 </div>
 
                 <!-- Preview Section -->
@@ -230,20 +288,7 @@
                     <h3>Organization Preview (Dry Run)</h3>
                     <p class="text-muted" id="previewSummary"></p>
 
-                    <div class="table-container">
-                        <table class="table" id="previewTable">
-                            <thead>
-                                <tr>
-                                    <th>Playlist</th>
-                                    <th>Current</th>
-                                    <th>Proposed</th>
-                                    <th>Genre</th>
-                                </tr>
-                            </thead>
-                            <tbody id="previewBody">
-                            </tbody>
-                        </table>
-                    </div>
+                    <pre id="organizationPlanDetails" class="plan-json" tabindex="0" aria-label="Exact folder organization plan"></pre>
 
                     <div class="button-group">
                         <button class="btn btn-primary" id="confirmMoveBtn">Confirm & Execute</button>
@@ -255,7 +300,7 @@
                 <div id="organizationResults" class="card" style="display: none;">
                     <h3>Organization Results</h3>
                     <p id="organizationResultsSummary"></p>
-                    <div id="organizationResultsTable" class="table-container"></div>
+                    <pre id="organizationResultsTable" class="plan-json" tabindex="0" aria-label="Folder organization apply report"></pre>
                 </div>
             </section>
 
@@ -387,5 +432,6 @@
 
     <!-- Scripts -->
     <script src="/static/js/app.js"></script>
+    <script src="/static/js/playlist-plans.js"></script>
 </body>
 </html>

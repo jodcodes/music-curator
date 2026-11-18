@@ -44,6 +44,48 @@ class AppleMusicInterface:
         resolved = next((p for p in candidates if p.exists() and p.is_dir()), requested)
         self.scripts_dir = str(resolved)
 
+    @staticmethod
+    def get_playlist_presentation_capabilities() -> dict:
+        """Return M9's static guidance, without probing Music, accounts, or the network.
+
+        Dictionary declarations are not runtime support. Manual means documented
+        UI instructions, not observed availability for the current user/playlist.
+        """
+        return {
+            "cover": {
+                "status": "manual",
+                "automation": "unknown",
+                "evidence": (
+                    "Static assessment 2026-11-17: Music 1.7 declares playlist artwork, "
+                    "but playlist-cover setters/persistence are unverified. Existing "
+                    "track artwork support does not establish playlist-cover support."
+                ),
+                "instructions": (
+                    "After explicit user authorization, select the intended playlist in "
+                    "Music > Edit (or More > Edit) > artwork Add; choose the reviewed "
+                    "image > Done, then inspect the displayed cover."
+                ),
+            },
+            "public_share": {
+                "status": "manual",
+                "automation": "unknown",
+                "visibility": "unknown",
+                "public_url": None,
+                "evidence": (
+                    "Static assessment 2026-11-17: the shared dictionary declaration "
+                    "does not verify setters, cloud propagation, public URLs or search "
+                    "visibility. No publication or account status has been verified."
+                ),
+                "instructions": (
+                    "Public visibility requires explicit user action and an Apple Music "
+                    "profile (subscription required); review audience and account/region "
+                    "restrictions. Select the playlist > Edit (or More > Edit) > "
+                    "Show in My Profile and in Search. Public audience, actual share URL "
+                    "and search visibility each need separate live verification."
+                ),
+            },
+        }
+
     def _run_applescript(self, script: str) -> Tuple[bool, str]:
         """
         Run AppleScript and return result.
@@ -85,6 +127,163 @@ class AppleMusicInterface:
     def _escape_applescript_string(value: str) -> str:
         """Escape a value for interpolation into an AppleScript string literal."""
         return value.replace("\\", "\\\\").replace('"', '\\"')
+
+    @staticmethod
+    def _validate_persistent_id(persistent_id: str) -> str:
+        if not isinstance(persistent_id, str) or not re.fullmatch(r"[0-9A-Fa-f]{16}", persistent_id):
+            raise ValueError("A persistent ID must contain exactly 16 hexadecimal characters")
+        return persistent_id.upper()
+
+    @staticmethod
+    def _text_handlers(strict: bool = False) -> str:
+        conversion = '''
+    if rawValue is missing value then return ""
+    set textValue to rawValue as text
+''' if strict else '''
+    try
+        set textValue to rawValue as text
+    on error
+        set textValue to ""
+    end try
+    if textValue is "missing value" then set textValue to ""
+'''
+        cleaning = r'''
+    set textValue to my replaceText("\\", "\\\\", textValue)
+    set textValue to my replaceText(tab, "\\t", textValue)
+    set textValue to my replaceText(linefeed, "\\n", textValue)
+    set textValue to my replaceText(return, "\\r", textValue)
+''' if strict else '''
+    set textValue to my replaceText(tab, " ", textValue)
+    set textValue to my replaceText(linefeed, " ", textValue)
+    set textValue to my replaceText(return, " ", textValue)
+'''
+        return f'''
+on cleanText(rawValue)
+{conversion}
+{cleaning}
+    return textValue
+end cleanText
+
+on replaceText(findText, replaceTextValue, sourceText)
+    set oldDelimiters to AppleScript's text item delimiters
+    set AppleScript's text item delimiters to findText
+    set textItems to text items of sourceText
+    set AppleScript's text item delimiters to replaceTextValue
+    set sourceText to textItems as text
+    set AppleScript's text item delimiters to oldDelimiters
+    return sourceText
+end replaceText
+'''
+
+    @staticmethod
+    def _decode_strict_text(value: str) -> str:
+        def unescape(match):
+            escapes = {"\\": "\\", "t": "\t", "n": "\n", "r": "\r"}
+            if match[1] not in escapes:
+                raise RuntimeError("Malformed escaped text returned by Music")
+            return escapes[match[1]]
+
+        return re.sub(r"\\(.)|\\$", unescape, value)
+
+    def _playlist_by_id_script(self, playlist_id: str, writable: bool = False) -> str:
+        playlist_id = self._validate_persistent_id(playlist_id)
+        script = f'''
+    set playlistMatches to every user playlist whose persistent ID is "{playlist_id}"
+    if (count of playlistMatches) is not 1 then error "Missing or ambiguous playlist ID {playlist_id}"
+    set targetPlaylist to item 1 of playlistMatches
+    if class of targetPlaylist is folder playlist then error "Playlist ID refers to a folder"
+'''
+        if writable:
+            script += '''
+    if smart of targetPlaylist then error "Cannot modify a smart playlist"
+    if special kind of targetPlaylist is not none then error "Cannot modify a special playlist"
+'''
+        return script
+
+    def get_playlist_info_by_id(self, playlist_id: str) -> Dict[str, str]:
+        """Read source identity/name by ID; raise on a missing playlist or read failure."""
+        selector = self._playlist_by_id_script(playlist_id)
+        script = f'''
+tell application "Music"
+{selector}
+    return "PLAYLIST_NAME" & linefeed & (name of targetPlaylist) & linefeed & "END_PLAYLIST_NAME"
+end tell
+'''
+        success, output = self._run_applescript(script)
+        if not success:
+            raise RuntimeError(f"Failed to load playlist info for {playlist_id}: {output}")
+        prefix, suffix = "PLAYLIST_NAME\n", "\nEND_PLAYLIST_NAME"
+        if not output.startswith(prefix) or not output.endswith(suffix):
+            raise RuntimeError(f"Malformed playlist info returned for {playlist_id}")
+        return {"persistent_id": playlist_id.upper(), "name": output[len(prefix):-len(suffix)]}
+
+    def get_playlist_tracks_by_id(self, playlist_id: str) -> List[Dict]:
+        """Read ordered memberships, including duplicates; failures never become empty lists."""
+        selector = self._playlist_by_id_script(playlist_id)
+        return self._read_playlist_tracks(selector, strict=True) or []
+
+    def create_playlist(self, playlist_name: str) -> str:
+        """Create a fresh playlist, even for a duplicate name, and return its persistent ID.
+
+        Raises RuntimeError on failure, including an unusable returned identity. A playlist
+        may already exist after such a failure; callers must not retry creation blindly.
+        """
+        if not isinstance(playlist_name, str) or not playlist_name.strip() or re.search(r"[\x00-\x1f\x7f]", playlist_name):
+            raise ValueError("A playlist name must be nonempty and contain no control characters")
+        escaped_name = self._escape_applescript_string(playlist_name)
+        script = f'''
+tell application "Music"
+    set createdPlaylist to make new user playlist with properties {{name:"{escaped_name}"}}
+    return persistent ID of createdPlaylist
+end tell
+'''
+        success, output = self._run_applescript(script)
+        if not success:
+            raise RuntimeError(f"Failed to create playlist: {output}")
+        try:
+            return self._validate_persistent_id(output)
+        except ValueError as exc:
+            raise RuntimeError(f"Created playlist returned an invalid persistent ID: {output}") from exc
+
+    def add_library_track_to_playlist_by_id(self, playlist_id: str, persistent_id: str) -> bool:
+        """Append one occurrence to an ordinary playlist by ID; return False on failure."""
+        selector = self._playlist_by_id_script(playlist_id, writable=True)
+        persistent_id = self._validate_persistent_id(persistent_id)
+        script = f'''
+tell application "Music"
+{selector}
+    set sourceTrack to some track of library playlist 1 whose persistent ID is "{persistent_id}"
+    duplicate sourceTrack to targetPlaylist
+    return true
+end tell
+'''
+        success, output = self._run_applescript(script)
+        added = success and output.lower() == "true"
+        if not added:
+            logger.warning("Failed to add track %s to playlist ID %s: %s", persistent_id, playlist_id, output)
+        return added
+
+    def remove_playlist_track_by_id(self, playlist_id: str, persistent_id: str) -> bool:
+        """Remove the first matching membership by ID, keeping the library track."""
+        selector = self._playlist_by_id_script(playlist_id, writable=True)
+        persistent_id = self._validate_persistent_id(persistent_id)
+        script = f'''
+tell application "Music"
+{selector}
+    repeat with playlistTrack in tracks of targetPlaylist
+        if persistent ID of playlistTrack is "{persistent_id}" then
+            delete playlistTrack
+            return true
+        end if
+    end repeat
+    return false
+end tell
+'''
+        success, output = self._run_applescript(script)
+        removed = success and output.lower() == "true"
+        if not removed:
+            logger.warning("Failed to remove track %s from playlist ID %s: %s", persistent_id, playlist_id, output)
+        return removed
 
     def import_local_track(self, filepath: Path) -> Optional[str]:
         """Add a local audio file and return the imported track's persistent ID."""
@@ -281,6 +480,215 @@ end tell
 
         return results
 
+    def get_user_playlists_with_counts_strict(self) -> List[Dict[str, int | str]]:
+        """List genuine user playlists by ID, preserving duplicate names; raise on failure."""
+        script = f'''
+{self._text_handlers(strict=True)}
+tell application "Music"
+    set playlistRows to {{}}
+    set oldDelimiters to AppleScript's text item delimiters
+    try
+        repeat with pl in (every user playlist)
+            if class of pl is not folder playlist then
+                if special kind of pl is none then
+                    set playlistID to my cleanText(persistent ID of pl)
+                    set playlistName to my cleanText(name of pl)
+                    set trackCount to count of tracks of pl
+                    set AppleScript's text item delimiters to tab
+                    set end of playlistRows to {{playlistID, playlistName, trackCount as text}} as text
+                end if
+            end if
+        end repeat
+        set AppleScript's text item delimiters to linefeed
+        set outputText to playlistRows as text
+        set AppleScript's text item delimiters to oldDelimiters
+        return "PLAYLIST_ROWS" & linefeed & outputText & linefeed & "END_PLAYLIST_ROWS"
+    on error errMsg
+        set AppleScript's text item delimiters to oldDelimiters
+        error errMsg
+    end try
+end tell
+'''
+        success, output = self._run_applescript(script)
+        if not success:
+            raise RuntimeError(f"Failed to load user playlists: {output}")
+        prefix, suffix = "PLAYLIST_ROWS\n", "\nEND_PLAYLIST_ROWS"
+        if not output.startswith(prefix) or not output.endswith(suffix):
+            raise RuntimeError("Malformed user playlists returned by Music")
+        output = output[len(prefix):-len(suffix)]
+        results = []
+        seen_ids = set()
+        for row in output.split("\n") if output else []:
+            fields = row.split("\t")
+            if len(fields) != 3 or not fields[1] or not re.fullmatch(r"[0-9]+", fields[2]):
+                raise RuntimeError("Malformed user playlist returned by Music")
+            try:
+                persistent_id = self._validate_persistent_id(fields[0])
+            except ValueError as exc:
+                raise RuntimeError("Malformed user playlist ID returned by Music") from exc
+            if persistent_id in seen_ids:
+                raise RuntimeError("Music returned an ambiguous user playlist ID")
+            seen_ids.add(persistent_id)
+            results.append({"persistent_id": persistent_id, "name": self._decode_strict_text(fields[1]), "track_count": int(fields[2])})
+        return results
+
+    @staticmethod
+    def _validate_playlist_topology(rows: List[Dict]) -> List[Dict]:
+        """Validate a complete ID graph, including parents of unmodifiable playlists."""
+        if not isinstance(rows, list):
+            raise RuntimeError("Malformed playlist topology returned by Music")
+        items = {}
+        keys = {"persistent_id", "name", "kind", "parent_id", "modifiable"}
+        for row in rows:
+            if (not isinstance(row, dict) or set(row) != keys
+                    or not isinstance(row["name"], str) or not row["name"]
+                    or row["kind"] not in ("playlist", "folder")
+                    or type(row["modifiable"]) is not bool):
+                raise RuntimeError("Malformed playlist topology row returned by Music")
+            try:
+                pid = AppleMusicInterface._validate_persistent_id(row["persistent_id"])
+                parent = (AppleMusicInterface._validate_persistent_id(row["parent_id"])
+                          if row["parent_id"] is not None else None)
+            except ValueError as exc:
+                raise RuntimeError("Malformed playlist topology ID returned by Music") from exc
+            if pid in items:
+                raise RuntimeError("Music returned an ambiguous playlist topology ID")
+            items[pid] = dict(row, persistent_id=pid, parent_id=parent)
+        for row in items.values():
+            parent = row["parent_id"]
+            if parent is not None and (parent not in items or items[parent]["kind"] != "folder"):
+                raise RuntimeError("Incomplete or invalid playlist topology parent")
+        for row in items.values():
+            parent = row["parent_id"]
+            seen = {row["persistent_id"]}
+            while parent is not None:
+                if parent in seen:
+                    raise RuntimeError("Cyclic playlist topology returned by Music")
+                seen.add(parent)
+                parent = items[parent]["parent_id"]
+        return list(items.values())
+
+    def get_playlist_topology_strict(self) -> List[Dict]:
+        """Read exact escaped TSV rows for the entire hierarchy; never infer root parents.
+
+        Library/special/smart playlists are included but ineligible for moving. The
+        count and framing distinguish complete empty reads from failures/truncation.
+        """
+        script = f'''
+{self._text_handlers(strict=True)}
+tell application "Music"
+    set topologyRows to {{}}
+    set oldDelimiters to AppleScript's text item delimiters
+    try
+        set allPlaylists to every playlist
+        set topologyCount to count of allPlaylists
+        repeat with pl in allPlaylists
+            set playlistID to my cleanText(persistent ID of pl)
+            set playlistName to my cleanText(name of pl)
+            set parentID to ""
+            set parentPlaylist to parent of pl
+            if parentPlaylist is not missing value then
+                if class of parentPlaylist is not folder playlist then error "Invalid topology parent class"
+                set parentID to my cleanText(persistent ID of parentPlaylist)
+            end if
+            set playlistKind to "playlist"
+            set canModify to false
+            if class of pl is folder playlist then
+                set playlistKind to "folder"
+                set canModify to true
+            else if class of pl is user playlist then
+                if special kind of pl is none then
+                    if not (smart of pl) then set canModify to true
+                end if
+            end if
+            set AppleScript's text item delimiters to tab
+            set end of topologyRows to {{playlistID, playlistName, playlistKind, parentID, canModify as text}} as text
+        end repeat
+        set AppleScript's text item delimiters to linefeed
+        set outputText to topologyRows as text
+        set AppleScript's text item delimiters to oldDelimiters
+        return "TOPOLOGY_ROWS" & linefeed & (topologyCount as text) & linefeed & outputText & linefeed & "END_TOPOLOGY_ROWS"
+    on error errMsg
+        set AppleScript's text item delimiters to oldDelimiters
+        error errMsg
+    end try
+end tell
+'''
+        success, output = self._run_applescript(script)
+        if not success:
+            raise RuntimeError(f"Failed to load playlist topology: {output}")
+        prefix, suffix = "TOPOLOGY_ROWS\n", "\nEND_TOPOLOGY_ROWS"
+        if not output.startswith(prefix) or not output.endswith(suffix):
+            raise RuntimeError("Malformed playlist topology returned by Music")
+        count_text, separator, body = output[len(prefix):-len(suffix)].partition("\n")
+        if not separator or not re.fullmatch(r"[0-9]+", count_text):
+            raise RuntimeError("Malformed playlist topology count returned by Music")
+        rows = []
+        for line in body.split("\n") if body else []:
+            fields = line.split("\t")
+            if len(fields) != 5 or fields[4] not in ("true", "false"):
+                raise RuntimeError("Malformed playlist topology row returned by Music")
+            fields = [self._decode_strict_text(field) for field in fields]
+            rows.append({"persistent_id": fields[0], "name": fields[1], "kind": fields[2],
+                         "parent_id": fields[3] or None, "modifiable": fields[4] == "true"})
+        if len(rows) != int(count_text):
+            raise RuntimeError("Incomplete playlist topology returned by Music")
+        return self._validate_playlist_topology(rows)
+
+    def _folder_by_id_script(self, parent_id: str) -> str:
+        parent_id = self._validate_persistent_id(parent_id)
+        return f'''
+    set folderMatches to every playlist whose persistent ID is "{parent_id}"
+    if (count of folderMatches) is not 1 then error "Missing or ambiguous folder ID {parent_id}"
+    set targetFolder to item 1 of folderMatches
+    if class of targetFolder is not folder playlist then error "Parent ID does not refer to a folder"
+'''
+
+    def create_playlist_folder_by_id(self, name: str, parent_id: Optional[str] = None) -> str:
+        """Create a true folder at an exact parent ID; an uncertain result must not be retried."""
+        if (not isinstance(name, str) or not name.strip()
+                or re.search(r"[\x00-\x1f\x7f]", name)):
+            raise ValueError("A folder name must be nonempty and contain no control characters")
+        selector = self._folder_by_id_script(parent_id) if parent_id is not None else ""
+        location = " at targetFolder" if parent_id is not None else ""
+        escaped_name = self._escape_applescript_string(name)
+        script = f'''
+tell application "Music"
+{selector}
+    set createdFolder to make new folder playlist{location} with properties {{name:"{escaped_name}"}}
+    return persistent ID of createdFolder
+end tell
+'''
+        success, output = self._run_applescript(script)
+        if not success:
+            raise RuntimeError(f"Failed or uncertain folder creation: {output}")
+        try:
+            return self._validate_persistent_id(output)
+        except ValueError as exc:
+            raise RuntimeError(f"Created folder returned an invalid persistent ID: {output}") from exc
+
+    def move_playlist_by_id(self, playlist_id: str, parent_id: Optional[str] = None) -> bool:
+        """Move an ordinary playlist by ID; False includes failed/uncertain script results.
+
+        Callers must additionally reread topology to verify the actual new parent.
+        """
+        selector = self._playlist_by_id_script(playlist_id, writable=True)
+        folder_selector = self._folder_by_id_script(parent_id) if parent_id is not None else ""
+        destination = 'targetFolder' if parent_id is not None else 'application "Music"'
+        script = f'''
+tell application "Music"
+{selector}
+{folder_selector}
+    move targetPlaylist to {destination}
+    return true
+end tell
+'''
+        success, output = self._run_applescript(script)
+        moved = success and output.lower() == "true"
+        if not moved:
+            logger.warning("Failed or uncertain move of playlist ID %s: %s", playlist_id, output)
+        return moved
+
     def is_folder(self, item_name: str) -> bool:
         """Check if an item is a folder (True) or playlist (False)."""
         script = f"""
@@ -343,6 +751,22 @@ end tell
 
         tracks = self._parse_applescript_dict_list(output)
         return tracks if tracks else []
+
+    def get_library_tracks_strict(self) -> List[Dict]:
+        """Read the full library with real unique IDs and metadata; raise on incomplete reads.
+
+        Missing optional metadata, including a missing local location, remains empty.
+        Provider/coercion failures and malformed or repeated IDs fail the whole read.
+        """
+        tracks = self._read_playlist_tracks("set targetPlaylist to library playlist 1", strict=True) or []
+        seen_ids = set()
+        for track in tracks:
+            persistent_id = self._validate_persistent_id(track["persistent_id"])
+            if persistent_id in seen_ids:
+                raise RuntimeError("Music returned an ambiguous library track ID")
+            seen_ids.add(persistent_id)
+            track["persistent_id"] = persistent_id
+        return tracks
 
     def get_favourite_tracks(self) -> List[Dict]:
         """Return tracks from Apple Music's Favourite Songs playlist."""
@@ -549,36 +973,43 @@ end tell
     def _get_regular_playlist_tracks(self, playlist_name: str) -> Optional[List[Dict]]:
         """Get tracks from a regular (non-folder) playlist."""
         escaped_playlist_name = self._escape_applescript_string(playlist_name)
-        script = f"""
-on cleanText(rawValue)
-    try
-        set textValue to rawValue as text
-    on error
-        set textValue to ""
-    end try
-    if textValue is "missing value" then set textValue to ""
-    set textValue to my replaceText(tab, " ", textValue)
-    set textValue to my replaceText(linefeed, " ", textValue)
-    set textValue to my replaceText(return, " ", textValue)
-    return textValue
-end cleanText
+        return self._read_playlist_tracks(f'set targetPlaylist to playlist "{escaped_playlist_name}"')
 
-on replaceText(findText, replaceTextValue, sourceText)
-    set oldDelimiters to AppleScript's text item delimiters
-    set AppleScript's text item delimiters to findText
-    set textItems to text items of sourceText
-    set AppleScript's text item delimiters to replaceTextValue
-    set sourceText to textItems as text
-    set AppleScript's text item delimiters to oldDelimiters
-    return sourceText
-end replaceText
+    def _read_playlist_tracks(self, selector: str, strict: bool = False) -> Optional[List[Dict]]:
+        """Share batched metadata reading while retaining the legacy name-reader contract."""
+        error_action = "error errMsg" if strict else 'return ""'
+        # Keep empty edge fields intact through _run_applescript's stdout.strip().
+        result_expression = '"TRACK_ROWS" & linefeed & outputText & linefeed & "END_TRACK_ROWS"' if strict else "outputText"
+        location_read = '''
+            set trackLocations to location of every track of targetPlaylist
+''' if strict else '''
+            try
+                set trackLocations to location of every track of targetPlaylist
+            on error
+                set trackLocations to {}
+                repeat trackCount times
+                    set end of trackLocations to missing value
+                end repeat
+            end try
+'''
+        location_path = '''
+                if item trackIndex of trackLocations is not missing value then
+                    set trackLocation to POSIX path of (item trackIndex of trackLocations as alias)
+                end if
+''' if strict else '''
+                try
+                    set trackLocation to POSIX path of (item trackIndex of trackLocations as alias)
+                end try
+'''
+        script = f"""
+{self._text_handlers(strict)}
 
 tell application "Music"
     set trackRows to {{}}
     set oldDelimiters to AppleScript's text item delimiters
     
     try
-        set targetPlaylist to playlist "{escaped_playlist_name}"
+        {selector}
         set trackCount to count of tracks of targetPlaylist
         if trackCount > 0 then
             set trackNames to name of every track of targetPlaylist
@@ -590,19 +1021,10 @@ tell application "Music"
             set trackYears to year of every track of targetPlaylist
             set trackComposers to composer of every track of targetPlaylist
             set trackDurations to duration of every track of targetPlaylist
-            try
-                set trackLocations to location of every track of targetPlaylist
-            on error
-                set trackLocations to {{}}
-                repeat trackCount times
-                    set end of trackLocations to missing value
-                end repeat
-            end try
+{location_read}
             repeat with trackIndex from 1 to trackCount
                 set trackLocation to ""
-                try
-                    set trackLocation to POSIX path of (item trackIndex of trackLocations as alias)
-                end try
+{location_path}
                 set AppleScript's text item delimiters to tab
                 set end of trackRows to {{my cleanText(item trackIndex of trackNames), my cleanText(item trackIndex of trackIDs), my cleanText(item trackIndex of trackArtists), my cleanText(item trackIndex of trackAlbums), my cleanText(item trackIndex of trackGenres), my cleanText(item trackIndex of trackBPMs), my cleanText(item trackIndex of trackYears), my cleanText(item trackIndex of trackComposers), my cleanText(item trackIndex of trackDurations), my cleanText(trackLocation)}} as text
             end repeat
@@ -610,26 +1032,35 @@ tell application "Music"
         set AppleScript's text item delimiters to linefeed
         set outputText to trackRows as text
         set AppleScript's text item delimiters to oldDelimiters
-        return outputText
+        return {result_expression}
     on error errMsg
         set AppleScript's text item delimiters to oldDelimiters
-        return ""
+        {error_action}
     end try
 end tell
 """
         success, output = self._run_applescript(script)
         if not success:
             raise RuntimeError(f"Failed to load playlist tracks: {output}")
+        if strict:
+            prefix, suffix = "TRACK_ROWS\n", "\nEND_TRACK_ROWS"
+            if not output.startswith(prefix) or not output.endswith(suffix):
+                raise RuntimeError("Malformed playlist membership returned by Music")
+            output = output[len(prefix):-len(suffix)]
         if not output:
             return None
 
-        tracks = self._parse_track_rows(output)
+        tracks = self._parse_track_rows(output, strict=strict)
         return tracks if tracks else None
 
-    def _parse_track_rows(self, output: str) -> Optional[List[Dict]]:
+    def _parse_track_rows(self, output: str, strict: bool = False) -> Optional[List[Dict]]:
         tracks: List[Dict] = []
-        for row in output.splitlines():
+        for row in output.split("\n") if strict else output.splitlines():
             fields = row.split("\t")
+            if strict:
+                if len(fields) != 10 or not fields[0] or not re.fullmatch(r"[0-9A-Fa-f]{16}", fields[1]):
+                    raise RuntimeError("Malformed playlist membership returned by Music")
+                fields = [self._decode_strict_text(field) for field in fields]
             if len(fields) < 10:
                 fields.extend([""] * (10 - len(fields)))
             name, persistent_id, artist, album, genre, bpm, year, composer, duration, filepath = fields[:10]

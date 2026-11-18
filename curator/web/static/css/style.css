@@ -447,6 +447,38 @@ main.container {
     margin-bottom: var(--spacing);
 }
 
+#playlist-plans fieldset {
+    min-width: 0;
+    border: 1px solid var(--border-color);
+    padding: var(--spacing);
+    margin-bottom: var(--spacing);
+}
+
+.plan-json {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 32rem;
+    overflow: auto;
+    margin-bottom: var(--spacing);
+}
+
+#playlist-plans button,
+#playlist-plans select,
+#playlist-plans input[type="number"] {
+    min-height: 44px;
+}
+
+#playlist-plans [hidden] {
+    display: none;
+}
+
+#playlist-plans label:has(input[type="checkbox"]) {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 label {
     display: block;
     margin-bottom: 8px;
