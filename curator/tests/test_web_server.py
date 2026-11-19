@@ -26,16 +26,44 @@ import json
 
 import pytest
 
-from src.web_server import app
+from tests.test_web_access import login, secured_web
+
+
+@pytest.fixture(autouse=True)
+def isolated_web(secured_web, monkeypatch):
+    """Use explicit auth and a private temporary DB, never a broker or library."""
+    import src.db as db
+    import src.job_store as jobs
+    from src.library_state_store import LibraryStateStore
+
+    ws = secured_web
+    monkeypatch.setattr(db, "_engine", None)
+    monkeypatch.setattr(db, "_SessionLocal", None)
+    monkeypatch.setattr(jobs, "_job_store", None)
+    monkeypatch.setattr(ws, "setup_database", db.setup_database)
+    monkeypatch.setattr(ws, "get_job_store", jobs.get_job_store)
+    monkeypatch.setattr(ws, "LibraryStateStore", LibraryStateStore)
+    monkeypatch.setattr(ws, "CELERY_AVAILABLE", False)
+
+    class FakeClassifier:
+        def classify_playlist(self, tracks, playlist_id):
+            return None, {"confidence": 0.0}
+
+    monkeypatch.setattr(ws, "_get_playlist_classifier", lambda: FakeClassifier())
+    yield ws
+    if jobs._job_store is not None:
+        jobs._job_store.session.close()
+    if db._engine is not None:
+        db._engine.dispose()
 
 
 @pytest.fixture
-def client(monkeypatch):
-    """Create Flask test client."""
-    app.config["TESTING"] = True
+def client(monkeypatch, isolated_web):
+    """Create an authenticated Flask test client with real Origin/CSRF headers."""
+    ws = isolated_web
+    app = ws.app
 
     # Reset global state before each test
-    import src.web_server as ws
     ws._curation_smoke_tokens.clear()
 
     class FakePlaylistManager:
@@ -86,6 +114,9 @@ def client(monkeypatch):
     ws._user_settings = {}
 
     with app.test_client() as client:
+        headers = login(client)
+        client.environ_base.update(HTTP_ORIGIN=headers["Origin"],
+                                   HTTP_X_CSRF_TOKEN=headers["X-CSRF-Token"])
         yield client
 
 
@@ -539,28 +570,17 @@ class TestErrorHandling:
 class TestOrganizeEndpoint:
     """Tests for POST /api/playlists/organize endpoint."""
 
-    def test_organize_returns_200(self, client):
-        """Organize endpoint should return 200 OK."""
-        response = client.post("/api/playlists/organize", json={})
-        assert response.status_code == 200
+    def test_organize_requires_explicit_ids(self, client):
+        assert client.post("/api/playlists/organize", json={}).status_code == 400
 
-    def test_organize_has_required_fields(self, client):
-        """Response must have required fields per spec."""
-        response = client.post("/api/playlists/organize", json={})
-        data = json.loads(response.data)
+    def test_organize_is_preview_only(self, client):
+        response = client.post("/api/playlists/organize", json={"playlist_ids": ["0123456789ABCDEF"], "dry_run": False})
+        assert response.status_code == 400
 
-        required_fields = ["changes", "total_changes", "success"]
-        for field in required_fields:
-            assert field in data, f"Missing field: {field}"
+    def test_organize_rejects_invalid_ids(self, client):
+        assert client.post("/api/playlists/organize", json={"playlist_ids": ["pl-1"]}).status_code == 400
 
-    def test_organize_changes_is_array(self, client):
-        """Changes field should be an array."""
-        response = client.post("/api/playlists/organize", json={})
-        data = json.loads(response.data)
-        assert isinstance(data["changes"], list)
-
-    def test_organize_uses_real_classifier_when_available(self, client, monkeypatch):
-        """When classifier and playlist manager are available, classify real playlists."""
+    def test_organize_uses_reviewed_manager_plan(self, client, monkeypatch):
         import src.web_server as ws
 
         class FakeClassifier:
@@ -568,27 +588,25 @@ class TestOrganizeEndpoint:
                 return "rock", {"confidence": 0.9}
 
         class FakePM:
-            def get_playlist_details(self, pid):
-                return {"name": f"Playlist {pid}", "tracks": []}
+            def preview_playlist_organization(self, ids, classifier):
+                assert classifier.enable_genre_enrichment is False
+                return {"operations": [{"playlist_id": pid, "genre": "rock", "confidence": 0.9,
+                                        "proposed_location": "/Genre/Rock"} for pid in ids]}
 
         monkeypatch.setattr(ws, "_get_playlist_classifier", lambda: FakeClassifier())
         monkeypatch.setattr(ws, "_get_playlist_manager", lambda: FakePM())
-
-        response = client.post("/api/playlists/organize", json={"playlist_ids": ["pl-1", "pl-2"]})
-        data = json.loads(response.data)
-
+        response = client.post("/api/playlists/organize", json={"playlist_ids": ["0123456789ABCDEF", "0000000000000002"]})
+        data = response.json
         assert response.status_code == 200
         assert data["total_changes"] == 2
-        assert data["changes"][0]["genre"] == "rock"
-        assert data["changes"][0]["proposed_location"] == "/Genre/Rock"
-        assert "confidence" in data["changes"][0]
+        assert data["changes"] == data["plan"]["operations"]
+        assert len(data["plan_id"]) == 43
+        assert data["expires_in"] == 900
 
     def test_organize_returns_503_when_classifier_unavailable(self, client, monkeypatch):
-        """Returns 503 if no classifier can be constructed."""
         import src.web_server as ws
         monkeypatch.setattr(ws, "_get_playlist_classifier", lambda: None)
-
-        response = client.post("/api/playlists/organize", json={"playlist_ids": ["pl-1"]})
+        response = client.post("/api/playlists/organize", json={"playlist_ids": ["0123456789ABCDEF"]})
         assert response.status_code == 503
 
 
@@ -613,8 +631,7 @@ class TestMoveEndpoint:
         data = json.loads(response.data)
         assert "results" in data
 
-    def test_move_calls_playlist_manager(self, client, monkeypatch):
-        """Move with real changes calls the playlist manager."""
+    def test_unreviewed_changes_never_call_playlist_manager(self, client, monkeypatch):
         import src.web_server as ws
 
         moved = []
@@ -633,45 +650,40 @@ class TestMoveEndpoint:
         response = client.post("/api/playlists/move", json={"confirmed": True, "changes": changes})
         data = json.loads(response.data)
 
-        assert response.status_code == 200
-        assert data["moved"] == 2
-        assert data["failed"] == 0
-        assert data["success"] is True
-        assert len(moved) == 2
-        assert moved[0] == ("My Mix", "Genre/Jazz")
-        assert moved[1] == ("Chill", "Genre/Pop")
+        assert response.status_code == 400
+        assert data["success"] is False
+        assert moved == []
 
     def test_move_handles_partial_failure(self, client, monkeypatch):
         """Move records per-playlist failures without crashing."""
         import src.web_server as ws
 
         class FlakyPM:
-            def move_playlist_to_folder(self, name, folder):
-                if name == "Bad":
-                    raise RuntimeError("AppleScript failed")
-                return True
+            def apply_playlist_organization(self, plan, confirmed=False):
+                assert confirmed is True
+                return {"success": False, "moved": 1, "failed": 1, "skipped": 1,
+                        "results": [{"status": "applied"}, {"status": "unresolved"}, {"status": "skipped"}]}
 
         monkeypatch.setattr(ws, "_get_playlist_manager", lambda: FlakyPM())
-
-        changes = [
-            {"playlist_id": "pl-1", "name": "Good", "genre": "rock"},
-            {"playlist_id": "pl-2", "name": "Bad", "genre": "rock"},
-        ]
-        response = client.post("/api/playlists/move", json={"confirmed": True, "changes": changes})
-        data = json.loads(response.data)
-
-        assert response.status_code == 200
+        with client.session_transaction() as active:
+            token, _ = ws._playlist_plans.put(active["sid"], "organization", {"operations": []})
+        response = client.post("/api/playlists/move", json={"confirmed": True, "plan_id": token})
+        data = response.json
+        assert response.status_code == 409
         assert data["moved"] == 1
-        assert data["failed"] == 1
+        assert data["failed"] == data["skipped"] == 1
         assert data["success"] is False
+        assert data["results"][1]["status"] == "unresolved"
+        assert client.post("/api/playlists/move", json={"confirmed": True, "plan_id": token}).status_code == 409
 
     def test_move_returns_503_when_manager_unavailable(self, client, monkeypatch):
         """Returns 503 if no playlist manager can be constructed."""
         import src.web_server as ws
         monkeypatch.setattr(ws, "_get_playlist_manager", lambda: None)
 
-        changes = [{"playlist_id": "pl-1", "name": "X", "genre": "rock"}]
-        response = client.post("/api/playlists/move", json={"confirmed": True, "changes": changes})
+        with client.session_transaction() as active:
+            token, _ = ws._playlist_plans.put(active["sid"], "organization", {"operations": []})
+        response = client.post("/api/playlists/move", json={"confirmed": True, "plan_id": token})
         assert response.status_code == 503
 
 

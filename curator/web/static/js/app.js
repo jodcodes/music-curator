@@ -21,36 +21,75 @@ const app = {
         enrichmentRunning: false,
         enrichmentProgress: 0,
     },
+    sessionReady: null,
+    async ensureSession() {
+        if (!this.sessionReady) {
+            this.sessionReady = (async () => {
+                const response = await fetch('/api/session', {
+                    credentials: 'same-origin',
+                    mode: 'same-origin',
+                    cache: 'no-store',
+                    redirect: 'error',
+                    signal: AbortSignal.timeout(this.config.timeout),
+                });
+                if (response.status === 401) window.location.assign('/unlock');
+                if (!response.ok) throw new Error(`Session unavailable: HTTP ${response.status}`);
+                const data = await response.json();
+                if (typeof data.csrf_token !== 'string' || data.csrf_token.length < 32) {
+                    throw new Error('Session CSRF token unavailable');
+                }
+                return data.csrf_token; // Memory only; never persist an operator token.
+            })().catch(error => {
+                this.sessionReady = null;
+                throw error;
+            });
+        }
+        return this.sessionReady;
+    },
     async api(endpoint, options = {}) {
-        const url = `${this.config.apiBase}${endpoint}`;
+        const url = new URL(`${this.config.apiBase}${endpoint}`, window.location.origin);
         const timeout = options.timeout || this.config.timeout;
-
+        let timeoutId;
         try {
+            if (url.origin !== window.location.origin || !url.pathname.startsWith('/api/')) {
+                throw new Error('Only same-origin API requests are allowed');
+            }
+            const csrf = await this.ensureSession();
+            const method = (options.method || 'GET').toUpperCase();
+            const headers = new Headers({ 'Content-Type': 'application/json', ...options.headers });
+            if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) headers.set('X-CSRF-Token', csrf);
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), timeout);
-
+            timeoutId = setTimeout(() => controller.abort(), timeout);
+            // Never retry writes after timeout, network failure, or an uncertain service report.
             const response = await fetch(url, {
-                method: options.method || 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...options.headers,
-                },
+                method,
+                headers,
+                credentials: 'same-origin',
+                mode: 'same-origin',
+                cache: 'no-store',
+                redirect: 'error',
                 body: options.body ? JSON.stringify(options.body) : undefined,
                 signal: controller.signal,
             });
-
-            clearTimeout(timeoutId);
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            if (response.status === 401) {
+                this.sessionReady = null;
+                window.location.assign('/unlock');
             }
-
-            return await response.json();
+            const data = await response.json();
+            if (!response.ok) {
+                if (response.status === 403 && data.code === 'csrf_required') this.sessionReady = null;
+                const error = new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
+                error.report = data;
+                throw error;
+            }
+            return data;
         } catch (error) {
             console.error('API Error:', error);
             app.state.isOnline = false;
             updateStatus();
             throw error;
+        } finally {
+            clearTimeout(timeoutId);
         }
     },
 };
@@ -184,6 +223,7 @@ function showView(viewName) {
         const titles = {
             dashboard: 'Dashboard',
             playlists: 'Playlists',
+            'playlist-plans': 'Seed & Split Playlists',
             enrich: 'Enrich Metadata',
             analyze: 'Analyze Mood',
             organize: 'Organize Playlists',
@@ -556,74 +596,91 @@ function renderTemperamentChart(results) {
 // Organization
 // ============================================================================
 
-// Keep last organize result so confirmMove can pass real changes to /move
-let _lastOrganizeChanges = [];
+let _lastOrganizePlan = null;
+let _organizationBusy = false;
+let _organizationExpiry;
 
-async function reviewChanges() {
+function refreshOrganizationControls() {
+    const sources = document.getElementById('organizationSources');
+    sources.disabled = _organizationBusy;
+    document.getElementById('organizationLoadSources').disabled = _organizationBusy;
+    DOM.reviewChangesBtn().disabled = _organizationBusy || sources.selectedOptions.length === 0;
+    DOM.confirmMoveBtn().disabled = _organizationBusy || !_lastOrganizePlan;
+    DOM.cancelMoveBtn().disabled = _organizationBusy;
+}
+
+function invalidateOrganization(message = 'Selection changed. Preview again.') {
+    _lastOrganizePlan = null;
+    clearTimeout(_organizationExpiry);
+    DOM.organizationPreview().style.display = 'none';
+    document.getElementById('organizationStatus').textContent = message;
+    refreshOrganizationControls();
+}
+
+async function loadOrganizationSources() {
+    _organizationBusy = true;
+    invalidateOrganization('Reading source playlists…');
+    const select = document.getElementById('organizationSources');
+    select.replaceChildren();
     try {
-        showSpinner(true);
-        const result = await app.api('/playlists/organize', {
-            method: 'POST',
-            body: { dry_run: true },
-        });
-
-        if (result.changes && result.changes.length > 0) {
-            _lastOrganizeChanges = result.changes;
-            renderOrganizationPreview(result.changes, result.total_changes);
-            DOM.organizationPreview().style.display = 'block';
-        } else {
-            _lastOrganizeChanges = [];
-            showAlert('No playlists to organize', 'info');
+        const rows = await app.api('/playlist-plans/sources');
+        for (const row of rows) {
+            select.add(new Option(`${row.name} [${row.persistent_id}]`, row.persistent_id));
         }
+        document.getElementById('organizationStatus').textContent = rows.length ? 'Choose explicit source playlists.' : 'No eligible source playlists.';
     } catch (error) {
-        showAlert('Failed to review changes: ' + error.message, 'danger');
+        document.getElementById('organizationStatus').textContent = `Unable to load sources: ${error.message}`;
     } finally {
-        showSpinner(false);
+        _organizationBusy = false;
+        refreshOrganizationControls();
     }
 }
 
-function renderOrganizationPreview(changes, total) {
-    const body = DOM.previewBody();
-    body.innerHTML = changes.map(change => `
-        <tr>
-            <td>${change.name || change.playlist_id}</td>
-            <td>${change.current_location || '/Playlists'}</td>
-            <td><strong>${change.proposed_location}</strong></td>
-            <td>${change.genre}${change.confidence != null ? ` <small>(${(change.confidence * 100).toFixed(0)}%)</small>` : ''}</td>
-        </tr>
-    `).join('');
-
-    document.getElementById('previewSummary').textContent = 
-        `Ready to move ${total} playlist${total !== 1 ? 's' : ''} to organized folders.`;
+async function reviewChanges() {
+    if (DOM.reviewChangesBtn().disabled) return;
+    const ids = Array.from(document.getElementById('organizationSources').selectedOptions, option => option.value);
+    _organizationBusy = true;
+    invalidateOrganization('Reading folder preview; no Music writes…');
+    document.getElementById('organizationResults').style.display = 'none';
+    try {
+        const result = await app.api('/playlists/organize', { method: 'POST', body: { playlist_ids: ids, dry_run: true } });
+        _lastOrganizePlan = result.plan_id;
+        document.getElementById('organizationPlanDetails').textContent = JSON.stringify(result.plan, null, 2);
+        document.getElementById('previewSummary').textContent = 'Review exact persistent IDs, current folder components, target components and skip reasons. Plan expires after 15 minutes.';
+        DOM.organizationPreview().style.display = 'block';
+        document.getElementById('organizationStatus').textContent = 'Read-only folder preview ready.';
+        _organizationExpiry = setTimeout(() => invalidateOrganization('Folder plan expired. Preview again.'), result.expires_in * 1000);
+    } catch (error) {
+        document.getElementById('organizationStatus').textContent = `Preview failed: ${error.message}`;
+    } finally {
+        _organizationBusy = false;
+        refreshOrganizationControls();
+    }
 }
 
 async function confirmMove() {
-    const ok = await showModal(
-        'Confirm Playlist Organization',
-        'This will move playlists to their genre folders. Continue?'
-    );
-
-    if (!ok) return;
-
+    if (_organizationBusy || !_lastOrganizePlan) return;
+    _organizationBusy = true;
+    refreshOrganizationControls();
+    const ok = await showModal('Confirm Playlist Organization', 'I reviewed the exact folder plan and authorize moving its playlists in Apple Music. Continue?');
+    if (!ok || !_lastOrganizePlan) {
+        _organizationBusy = false;
+        refreshOrganizationControls();
+        return;
+    }
+    const token = _lastOrganizePlan;
+    invalidateOrganization('Submitting once. Do not retry an uncertain move.');
+    let report;
     try {
-        showSpinner(true);
-        const result = await app.api('/playlists/move', {
-            method: 'POST',
-            body: { confirmed: true, changes: _lastOrganizeChanges },
-        });
-
-        if (result.failed > 0) {
-            showAlert(`Moved ${result.moved}, ${result.failed} failed (${result.duration_seconds}s)`, 'warning');
-        } else {
-            showAlert(`✓ Moved ${result.moved} playlists in ${result.duration_seconds}s`, 'success');
-        }
-        DOM.organizationPreview().style.display = 'none';
-        _lastOrganizeChanges = [];
-        loadPlaylists();
+        report = await app.api('/playlists/move', { method: 'POST', body: { confirmed: true, plan_id: token } });
     } catch (error) {
-        showAlert('Failed to move playlists: ' + error.message, 'danger');
+        report = error.report || { success: false, error: error.message, outcome: 'Unknown. Inspect Music manually; do not resubmit.' };
     } finally {
-        showSpinner(false);
+        document.getElementById('organizationResults').style.display = 'block';
+        document.getElementById('organizationResultsTable').textContent = JSON.stringify(report, null, 2);
+        document.getElementById('organizationResultsSummary').textContent = report.success === true ? 'Completed. Review per-operation results.' : 'Failed or uncertain. Inspect the report; no automatic retry.';
+        _organizationBusy = false;
+        refreshOrganizationControls();
     }
 }
 
@@ -1391,6 +1448,7 @@ function setupEventListeners() {
             e.preventDefault();
             const view = link.dataset.view;
             showView(view);
+            DOM.navMenu().classList.remove('show');
 
             // Load view-specific data
             if (view === 'playlists') loadPlaylists();
@@ -1425,11 +1483,12 @@ function setupEventListeners() {
     DOM.startAnalysisBtn().addEventListener('click', startAnalysis);
 
     // Organization
+    document.getElementById('organizationLoadSources').addEventListener('click', loadOrganizationSources);
+    document.getElementById('organizationSources').addEventListener('change', () => invalidateOrganization());
     DOM.reviewChangesBtn().addEventListener('click', reviewChanges);
     DOM.confirmMoveBtn().addEventListener('click', confirmMove);
-    DOM.cancelMoveBtn().addEventListener('click', () => {
-        DOM.organizationPreview().style.display = 'none';
-    });
+    DOM.cancelMoveBtn().addEventListener('click', () => invalidateOrganization('Review cancelled. Preview again.'));
+    refreshOrganizationControls();
 
     // Curation
     if (DOM.curationLoadSnapshotBtn()) {

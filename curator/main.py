@@ -24,6 +24,8 @@ Usage:
 import sys
 import os
 import argparse
+import hashlib
+import json
 from collections import Counter
 from pathlib import Path
 
@@ -52,16 +54,18 @@ logger = setup_logger("curator")
 IS_MACOS = sys.platform == "darwin"
 
 # Import main modules
-mood_analyzer = None
 metadata_fill = None
 plsort_module = None  # type: ignore
 
-try:
-    from src.mood_analyzer import TemperamentAnalyzer, MusicAppClient, OpenAILLMClient
 
-    mood_analyzer = sys.modules.get("src.mood_analyzer")
-except ImportError as e:
-    logger.warning(f"Could not import temperament_analyzer: {e}")
+def __getattr__(name):
+    """Keep mood aliases available without its dotenv/log startup for other commands."""
+    if name in {"mood_analyzer", "TemperamentAnalyzer", "MusicAppClient", "OpenAILLMClient"}:
+        from importlib import import_module
+
+        module = import_module("src.mood_analyzer")
+        return module if name == "mood_analyzer" else getattr(module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 try:
     from src.metadata_fill import MetadataFillCLI
@@ -103,6 +107,59 @@ def require_macos(feature_name: str) -> bool:
     print(error(f"{feature_name} requires macOS and Music.app (AppleScript integration)."))
     print(info("Tip: On non-macOS, use metadata enrichment in Folder mode."))
     return False
+
+
+def show_playlist_presentation(args=None):
+    """Print static guidance; never inspect or modify Music/library/account state."""
+    print("Playlist presentation: static guidance, not a live capability check.")
+    for name, capability in AppleMusicInterface.get_playlist_presentation_capabilities().items():
+        print(f"{name}: {capability['status']}")
+        for field, value in capability.items():
+            if field != "status":
+                print(f"  {field}: {value}")
+    print("Evidence and manual guide: docs/playlist-presentation.md")
+    return 0
+
+
+def run_playlist_cover(args=None):
+    """Preview or confirm one playlist cover replacement by stable playlist ID."""
+    playlist_id = getattr(args, "playlist_id", None)
+    image = getattr(args, "image", None)
+    apply = getattr(args, "apply", False)
+    confirmed = getattr(args, "yes", False)
+    if not playlist_id or not image or (apply and not confirmed) or (confirmed and not apply):
+        print(error("Preview requires --playlist-id ID --image PATH. Apply separately with --apply --yes."))
+        return 1
+    if not require_macos("Playlist cover"):
+        return 1
+    try:
+        music = AppleMusicInterface()
+        if apply:
+            print(warning("Applying once. Inspect Music after any uncertain result; do not retry blindly."))
+            result = music.set_playlist_cover_by_id(playlist_id, image)
+            print(json.dumps({**result, "applied": True}, ensure_ascii=False, indent=2))
+            return 0
+
+        cover = music._cover_image(image)
+        digest = hashlib.sha256()
+        with open(cover["path"], "rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        playlist = music.get_playlist_info_by_id(playlist_id)
+        count = music.get_playlist_artwork_count_by_id(playlist_id)
+        print(json.dumps({
+            "playlist_id": playlist["persistent_id"],
+            "playlist_name": playlist["name"],
+            "image": {**cover, "sha256": digest.hexdigest()},
+            "existing_artwork_count": count,
+            "planned": "replace",
+            "applied": False,
+        }, ensure_ascii=False, indent=2))
+        print(info("Preview only; no artwork changed. Apply with --apply --yes after review."))
+        return 0
+    except Exception as exc:
+        print(error(f"Playlist cover failed: {exc}"))
+        return 1
 
 
 def run_localize(args=None):
@@ -153,8 +210,9 @@ def run_mood_analysis(args=None):
         print(info("Initializing clients..."))
         logger.debug("Initializing mood analysis clients")
 
-        music_client = MusicAppClient()
-        llm_client = OpenAILLMClient()
+        cli = sys.modules[__name__]
+        music_client = cli.MusicAppClient()
+        llm_client = cli.OpenAILLMClient()
 
         print(info("Connecting to Music.app..."))
         if not music_client.authenticate():
@@ -163,7 +221,7 @@ def run_mood_analysis(args=None):
             return 1
 
         print(success("Connected to Music.app"))
-        analyzer = TemperamentAnalyzer(music_client, llm_client)
+        analyzer = cli.TemperamentAnalyzer(music_client, llm_client)
         # ponytail: TemperamentAnalyzer.run() does full library; per-playlist
         # filtering would require extending the analyzer — pass playlist hint via
         # an env var or future run(playlist=...) API if needed.
@@ -267,52 +325,48 @@ def run_metadata_enrichment(args=None):
 
 
 def run_playlist_organization(args=None):
-    """Run plsort - playlist organization by genre."""
-    print_header("📚 Playlist Organization", "Classify & Organize by Genre")
-
+    playlist_ids = getattr(args, "playlist_id", None) or []
+    apply = getattr(args, "apply", False)
+    saved = getattr(args, "plan", None)
+    output = getattr(args, "save_plan", None)
+    confirmed = getattr(args, "yes", False)
+    valid = (saved and confirmed and not (playlist_ids or output)) if apply else (
+        playlist_ids and not (saved or confirmed)
+    )
+    if not valid:
+        print(error("Preview requires --playlist-id ID [--save-plan PATH]. Apply separately with --plan PATH --apply --yes."))
+        return 1
     if not require_macos("Playlist organization"):
         return 1
-
     try:
-        if plsort_module is None:
-            print(error("plsort module not available"))
-            return 1
+        from src.playlist_manager import PlaylistManager
 
-        apply = getattr(args, "apply", False) if args else False
+        if apply:
+            with Path(saved).open(encoding="utf-8") as handle:
+                plan = json.load(handle)
+            result = PlaylistManager().apply_playlist_organization(plan, confirmed=True)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result.get("success") is True else 1
 
-        # Check if whitelist is enabled
-        whitelist_enabled, whitelist = load_centralized_whitelist()
+        from src.playlist_classifier import PlaylistClassifier
 
-        if whitelist_enabled:
-            print(warning(f"Whitelist ENABLED with {len(whitelist)} playlists"))
-        else:
-            print(info("Whitelist disabled - all playlists will be processed"))
-
-        print()
-        print(warning("⚠️  This will ACTUALLY MOVE playlists in Apple Music!"))
-        print()
-
-        if not apply:
-            print(info("Dry-run mode — showing what would be organized. Pass --apply to execute."))
-            result = plsort_module.main(args=["--no-interactive", "--dry-run"])
-            print_footer()
-            return result if result is not None else 0
-
-        # Live apply — prompt confirmation
-        if not Menu.confirm("Continue with playlist organization?", default=False):
-            print(info("Organization cancelled"))
-            return 0
-
-        print(info("Starting playlist organization..."))
-
-        # Run plsort with default settings (will actually move playlists)
-        result = plsort_module.main(args=["--no-interactive"])
-
-        print_footer()
-        return result if result is not None else 0
-    except Exception as e:
-        logger.error(f"Playlist organization failed: {e}")
-        print(error(f"Organization failed: {e}"))
+        data = Path(__file__).resolve().parent / "data"
+        classifier = PlaylistClassifier(
+            genre_map_path=str(data / "config/genre_map.json"),
+            weights_path=str(data / "config/weights.json"),
+            artist_lists_dir=str(data / "artist_lists"),
+            enable_genre_enrichment=False,
+        )
+        plan = PlaylistManager().preview_playlist_organization(playlist_ids, classifier)
+        print(json.dumps(plan, ensure_ascii=False, indent=2))
+        if output:
+            with open(output, "x", encoding="utf-8", opener=lambda path, flags: os.open(path, flags, 0o600)) as handle:
+                json.dump(plan, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+        print(info("Preview only; no folder/playlist writes. Review the saved plan, then use --plan PATH --apply --yes."))
+        return 0
+    except Exception as exc:
+        print(error(f"Playlist organization failed: {exc}"))
         return 1
 
 
@@ -396,6 +450,179 @@ def run_curation(args=None):
     if preview.get("total_skipped"):
         print(warning(f"Skipped tracks: {preview['total_skipped']}"))
     return 0
+
+
+def run_playlist_split(args):
+    """Preview explicit source IDs or apply the exact saved, reviewed plan."""
+    playlist_ids = args.playlist_id or []
+    if args.init_journal:
+        if playlist_ids or args.plan or args.save_plan or args.apply or args.yes:
+            print(error("Use --init-journal separately, without preview/apply options."))
+            return 1
+    elif args.apply:
+        if not args.yes or not args.plan or playlist_ids or args.save_plan:
+            print(error("Apply requires --plan PATH --apply --yes, without preview options."))
+            return 1
+    elif not playlist_ids or args.plan or args.yes:
+        print(error("Preview requires explicit --playlist-id ID (repeatable); use --save-plan PATH to retain it."))
+        return 1
+
+    if not args.init_journal and not require_macos("Playlist split"):
+        return 1
+
+    try:
+        if args.apply:
+            with Path(args.plan).open(encoding="utf-8") as handle:
+                plan = json.load(handle)
+            if not isinstance(plan, dict) or not plan.get("sources"):
+                raise ValueError("A saved split plan with selected sources is required")
+
+        from src.curation_service import CurationService
+
+        service = CurationService()
+        if args.init_journal:
+            service.initialize_playlist_split_journal()
+            print(success(f"Initialized split journal: {service.split_journal_path}"))
+            print(info("Keep this journal for every apply. Never delete or reinitialize it to retry."))
+            return 0
+
+        print_header("Playlist Split", "Source playlists are retained; ordered occurrences are copied")
+        if args.apply:
+            print(info(f"Applying saved plan: {plan.get('fingerprint', 'unknown')}"))
+            result = service.apply_playlist_splits(plan, confirmed=True)
+            print(info("Durably recorded per-part progress (historical until verified):"))
+            for part in result.get("parts", []):
+                print(info(
+                    f"{part['source_id']} → {part['name']}: {part['status']}; "
+                    f"target={part.get('playlist_id') or 'unknown'}; "
+                    f"confirmed occurrences={part['confirmed_count']}"
+                ))
+            for pending in result.get("unresolved", []):
+                print(warning(f"Unresolved operation: {json.dumps(pending, ensure_ascii=False, sort_keys=True)}"))
+            if not result.get("success"):
+                print(error(f"Split apply stopped: {result.get('error', 'Unknown error')}"))
+                print(warning(
+                    "Keep the original journal. Never initialize/reset it to bypass a failure. "
+                    "Unresolved writes require manual recovery; no automatic repair or rollback is available."
+                ))
+                return 1
+            print(success("Saved split plan completed; source playlists retained."))
+            return 0
+
+        plan = service.preview_playlist_splits(playlist_ids)
+        print(info(f"Plan fingerprint: {plan['fingerprint']}"))
+        for source in plan["sources"]:
+            print(info(f"Source {source['source_id']}: {source['source_name']!r} ({len(source['track_ids'])} occurrences)"))
+            if source["skip_reason"]:
+                print(warning(f"Skipped: {source['skip_reason']}"))
+            offset = 0
+            for part in source["parts"]:
+                count = len(part["track_ids"])
+                print(info(f"  {part['name']}: {count} occurrences, source positions {offset + 1}–{offset + count}"))
+                offset += count
+        if args.save_plan:
+            with open(
+                args.save_plan, "x", encoding="utf-8",
+                opener=lambda path, flags: os.open(path, flags, 0o600),
+            ) as handle:
+                json.dump(plan, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+            print(info(f"Saved exact plan for review: {args.save_plan}"))
+        print(info(
+            "Preview only; no Music writes or journal creation. "
+            "Review the saved JSON, then use --plan PATH --apply --yes."
+        ))
+        return 0
+    except Exception as exc:
+        print(error(f"Playlist split failed: {exc}"))
+        print(info("Keep any existing journal; initialization never resets existing state."))
+        return 1
+
+
+def run_seed_playlist(args):
+    """Preview an explicitly selected seed or apply only its saved reviewed plan."""
+    preview_options = args.playlist_id is not None or args.seed_track_id is not None or args.limit is not None
+    if args.init_journal:
+        valid = not (preview_options or args.plan or args.save_plan or args.apply or args.yes)
+    elif args.apply:
+        valid = args.yes and args.plan and not (preview_options or args.save_plan)
+    else:
+        valid = args.playlist_id and args.seed_track_id and not (args.plan or args.yes)
+    if not valid:
+        print(error(
+            "Preview requires --playlist-id ID --seed-track-id ID [--limit 1..30] [--save-plan PATH]. "
+            "Apply separately with --plan PATH --apply --yes; initialize separately with --init-journal."
+        ))
+        return 1
+    if not args.init_journal and not require_macos("Seed playlist"):
+        return 1
+
+    try:
+        if args.apply:
+            with Path(args.plan).open(encoding="utf-8") as handle:
+                plan = json.load(handle)
+            if not isinstance(plan, dict) or plan.get("kind") != "seed":
+                raise ValueError("A saved seed plan is required")
+
+        from src.curation_service import CurationService
+
+        service = CurationService()
+        if args.init_journal:
+            service.initialize_playlist_split_journal()
+            print(success(f"Initialized shared split/seed journal: {service.split_journal_path}"))
+            print(info("Keep the same journal for every apply. Never delete or reinitialize it to retry."))
+            return 0
+
+        if args.apply:
+            print(info(f"Applying saved seed plan: {plan.get('fingerprint', 'unknown')}"))
+            result = service.apply_seed_playlist(plan, confirmed=True)
+            print(info("Durably recorded per-part progress (historical until verified):"))
+            for part in result.get("parts", []):
+                print(info(
+                    f"{part['source_id']} → {part['name']}: {part['status']}; "
+                    f"target={part.get('playlist_id') or 'unknown'}; "
+                    f"confirmed occurrences={part['confirmed_count']}"
+                ))
+            for pending in result.get("unresolved", []):
+                print(warning(f"Unresolved operation: {json.dumps(pending, ensure_ascii=False, sort_keys=True)}"))
+            if not result.get("success"):
+                print(error(f"Seed apply stopped: {result.get('error', 'Unknown error')}"))
+                print(warning(
+                    "Keep the original journal. Never initialize/reset it to bypass a failure. "
+                    "Unresolved writes require manual recovery; no automatic repair or rollback is available."
+                ))
+                return 1
+            print(success("Saved seed plan completed; source playlist retained."))
+            return 0
+
+        plan = service.preview_seed_playlist(args.playlist_id, args.seed_track_id,
+                                             limit=args.limit if args.limit is not None else 30)
+        source, seed = plan["source"], plan["seed"]
+        print(info(f"Source {source['source_id']}: {source['source_name']!r}"))
+        print(info(f"Seed {seed['persistent_id']}: {seed.get('title') or seed.get('name')} — {seed['artist']}"))
+        print(info(f"Candidate scope: {plan['candidate_scope']}; ranking basis: {plan['ranking_basis']}"))
+        print(info(f"Plan fingerprint: {plan['fingerprint']}"))
+        print(info(f"Output: {plan['output']['name']} ({len(plan['tracks'])} tracks)"))
+        for row in plan["tracks"]:
+            track = row["track"]
+            print(info(
+                f"{row['persistent_id']}: {track.get('title') or track.get('name')} — {track['artist']}; "
+                f"reason={row['reason']}; warnings={','.join(row['warnings']) or 'none'}"
+            ))
+        for message in plan["warnings"]:
+            print(warning(message))
+        if args.save_plan:
+            with open(args.save_plan, "x", encoding="utf-8",
+                      opener=lambda path, flags: os.open(path, flags, 0o600)) as handle:
+                json.dump(plan, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+            print(info(f"Saved exact plan for review: {args.save_plan}"))
+        print(info("Preview only; source retained, no Music writes or journal creation. Review before --plan PATH --apply --yes."))
+        return 0
+    except Exception as exc:
+        print(error(f"Seed playlist failed: {exc}"))
+        print(info("Keep any existing journal; initialization never resets existing state."))
+        return 1
 
 
 def run_scan(args=None):
@@ -991,7 +1218,18 @@ def main(argv=None):
     enrich_parser.add_argument(
         "--force", action="store_true", help="Overwrite existing metadata fields"
     )
-    add_feature_parser("organize", "Run playlist organization")
+    organize_parser = add_feature_parser("organize", "Preview explicit playlist IDs or apply an exact reviewed folder plan")
+    organize_parser.add_argument("--playlist-id", action="append", help="Source persistent ID; repeat to select multiple playlists")
+    organize_parser.add_argument("--save-plan", metavar="PATH", help="Save exact preview privately to a new JSON file")
+    organize_parser.add_argument("--plan", metavar="PATH", help="Saved, reviewed organization plan")
+    organize_parser.add_argument("--apply", action="store_true", help="Apply only the saved plan; requires --yes")
+    organize_parser.add_argument("--yes", action="store_true", help="Explicitly confirm applying the saved plan")
+    add_feature_parser("playlist-presentation", "Show offline cover/sharing guidance (no Music access or writes)")
+    cover_parser = add_feature_parser("playlist-cover", "Preview or apply one playlist cover by ID (PNG/JPEG)")
+    cover_parser.add_argument("--playlist-id", required=True, help="Exact playlist persistent ID")
+    cover_parser.add_argument("--image", required=True, help="PNG or JPEG cover file")
+    cover_parser.add_argument("--apply", action="store_true", help="Replace the playlist cover; requires --yes")
+    cover_parser.add_argument("--yes", action="store_true", help="Explicitly confirm the cover replacement")
 
     localize_parser = add_feature_parser(
         "localize", "Preview/apply local replacements for unavailable playlist tracks"
@@ -1010,6 +1248,24 @@ def main(argv=None):
         action="store_true",
         help="Import, add, then remove only verified replacements",
     )
+
+    split_parser = add_feature_parser("split", "Preview playlist parts (maximum 100 tracks), or apply a reviewed plan")
+    split_parser.add_argument("--playlist-id", action="append", help="Explicit source persistent ID; repeat for multiple sources")
+    split_parser.add_argument("--save-plan", metavar="PATH", help="Save preview JSON to a new file for review (never overwrites)")
+    split_parser.add_argument("--plan", metavar="PATH", help="Previously saved, reviewed JSON plan to apply")
+    split_parser.add_argument("--apply", action="store_true", help="Apply the saved plan; requires --yes")
+    split_parser.add_argument("--yes", action="store_true", help="Explicitly confirm applying the saved plan")
+    split_parser.add_argument("--init-journal", action="store_true", help="Separate local-only first-use journal initialization; never resets existing state")
+
+    seed_parser = add_feature_parser("seed-playlist", "Preview a selected seed using recorded library metadata, or apply a reviewed plan")
+    seed_parser.add_argument("--playlist-id", help="Explicit source playlist persistent ID")
+    seed_parser.add_argument("--seed-track-id", help="Explicit member track persistent ID")
+    seed_parser.add_argument("--limit", type=int, default=None, help="Total tracks including seed (1–30; default 30)")
+    seed_parser.add_argument("--save-plan", metavar="PATH", help="Save exact preview privately to a new JSON file")
+    seed_parser.add_argument("--plan", metavar="PATH", help="Previously saved, reviewed seed plan")
+    seed_parser.add_argument("--apply", action="store_true", help="Apply only the saved plan; requires --yes")
+    seed_parser.add_argument("--yes", action="store_true", help="Explicitly confirm applying the saved plan")
+    seed_parser.add_argument("--init-journal", action="store_true", help="Separate local-only initialization of the shared split/seed journal; never resets")
 
     scan_parser = add_feature_parser("scan", "Scan Apple Music library and show stats")
     _ = scan_parser  # no extra args needed yet
@@ -1132,9 +1388,17 @@ def main(argv=None):
     elif args.feature == "enrich":
         return run_metadata_enrichment(args)
     elif args.feature == "organize":
-        return run_playlist_organization()
+        return run_playlist_organization(args)
+    elif args.feature == "playlist-presentation":
+        return show_playlist_presentation(args)
+    elif args.feature == "playlist-cover":
+        return run_playlist_cover(args)
     elif args.feature == "localize":
         return run_localize(args)
+    elif args.feature == "split":
+        return run_playlist_split(args)
+    elif args.feature == "seed-playlist":
+        return run_seed_playlist(args)
     elif args.feature == "scan":
         return run_scan(args)
     elif args.feature == "status":

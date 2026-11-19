@@ -13,15 +13,25 @@ State management:
 - Real-time updates via WebSocket (fallback: HTTP polling)
 """
 
-import os
+from collections import OrderedDict
+from copy import deepcopy
+import json
+import re
 import secrets
+from threading import Lock
 import sys
 import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, render_template_string, request
+from flask import Flask, g, jsonify, render_template_string, request, session
+from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
+
+from src.web_access import bounded_request_body, install_web_access, load_access_settings
+
+# Fail closed before service imports, logger setup, DB or Music startup work.
+_access_settings = load_access_settings()
 
 from src.db import setup_database
 from src.job_store import get_job_store
@@ -48,10 +58,11 @@ app = Flask(
     static_url_path="/static",
 )
 
-# Configuration
-WEB_HOST = os.getenv("WEB_HOST", "127.0.0.1")
-WEB_PORT = int(os.getenv("WEB_PORT", "4000"))
-WEB_DEBUG = os.getenv("WEB_DEBUG", "false").lower() == "true"
+# Register the access guard before all other before_request hooks.
+install_web_access(app, _access_settings)
+WEB_HOST = _access_settings.host
+WEB_PORT = _access_settings.port
+WEB_DEBUG = False
 
 # In-memory state for background operations
 # In production, use a proper job queue and database
@@ -441,118 +452,241 @@ def classify_playlist(playlist_id: str):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/playlists/organize", methods=["POST"])
+@app.post("/api/playlists/organize")
 def organize_playlists():
-    """
-    Generate dry-run preview of playlist organization using the real classifier.
-
-    Request body:
-      { "playlist_ids": ["id1", "id2"], "dry_run": true }
-    """
     try:
-        data = request.get_json() or {}
-        playlist_ids = data.get("playlist_ids", [])
-
+        data = _plan_json({"playlist_ids"}, {"dry_run"})
+        if data.get("dry_run", True) is not True:
+            raise BadRequest("Organization is preview-only; apply the reviewed plan separately")
+        ids = data["playlist_ids"]
+        if not isinstance(ids, list) or not 1 <= len(ids) <= 100:
+            raise BadRequest("Select 1 to 100 explicit persistent IDs")
+        for pid in ids:
+            _persistent_id(pid)
         classifier = _get_playlist_classifier()
-        pm = _get_playlist_manager()
-
-        if not classifier or not pm:
-            return jsonify({"error": "Playlist classifier unavailable"}), 503
-
-        # Use cached playlists if no ids given
-        if not playlist_ids:
-            cached = _get_playlists_from_cache()
-            playlist_ids = [p["id"] for p in cached] if cached else []
-
-        if not playlist_ids:
-            return jsonify({"changes": [], "total_changes": 0, "success": True})
-
-        changes = []
-        for pid in playlist_ids:
-            try:
-                detail = pm.get_playlist_details(pid) or {}
-                tracks = detail.get("tracks", [])
-                genre, info = classifier.classify_playlist(tracks, pid)
-                if genre:
-                    changes.append(
-                        {
-                            "playlist_id": pid,
-                            "name": detail.get("name", pid),
-                            "current_location": "/Playlists",
-                            "proposed_location": f"/Genre/{genre.title()}",
-                            "genre": genre,
-                            "confidence": (info or {}).get("confidence", 0.0),
-                        }
-                    )
-            except Exception as exc:
-                logger.debug(f"Could not classify playlist {pid}: {exc}")
-
-        return jsonify({"changes": changes, "total_changes": len(changes), "success": True})
-    except Exception as e:
-        logger.error(f"Failed to organize playlists: {e}")
-        return jsonify({"error": str(e)}), 500
+        manager = _get_playlist_manager()
+        if classifier is None or manager is None:
+            return jsonify(success=False, error="Playlist manager/classifier unavailable"), 503
+        classifier.enable_genre_enrichment = False
+        plan = manager.preview_playlist_organization(ids, classifier)
+        token, snapshot = _playlist_plans.put(session["sid"], "organization", plan)
+        changes = snapshot["operations"]
+        return jsonify(success=True, plan_id=token, plan=snapshot, changes=changes,
+                       total_changes=len(changes), expires_in=_playlist_plans.ttl)
+    except (BadRequest, RequestEntityTooLarge) as exc:
+        return jsonify(success=False, error=exc.description), exc.code
+    except ValueError:
+        return jsonify(success=False, error="Selected playlists or folder topology cannot be previewed"), 400
+    except Exception:
+        return jsonify(success=False, error="Unable to preview folder organization"), 503
 
 
-@app.route("/api/playlists/move", methods=["POST"])
+@app.post("/api/playlists/move")
 def move_playlists():
-    """
-    Execute playlist moves (requires confirmation from frontend).
-
-    Expects the ``changes`` array produced by /api/playlists/organize so the
-    frontend never has to re-classify — it passes the preview straight through.
-
-    Request body:
-      { "confirmed": true, "changes": [{"playlist_id": ..., "name": ..., "genre": ...}] }
-    """
     try:
-        data = request.get_json() or {}
-        confirmed = data.get("confirmed", False)
+        data = _plan_json({"confirmed"}, {"plan_id", "changes"})
+        if data["confirmed"] is not True:
+            raise BadRequest("confirmed must be literal true")
+        if "plan_id" not in data and data.get("changes", []) == []:
+            return jsonify(moved=0, applied=0, failed=0, skipped=0, duration_seconds=0, success=True, results=[])
+        if "changes" in data:
+            raise BadRequest("Submit the reviewed plan_id, not client-supplied moves")
+        token = data.get("plan_id")
+        if not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
+            raise BadRequest("A reviewed plan_id is required")
+        plan = _playlist_plans.claim(token, session["sid"], "organization")
+        if plan is None:
+            return jsonify(success=False, error="Folder plan unavailable, expired, replaced or already submitted"), 409
+        manager = _get_playlist_manager()
+        if manager is None:
+            return jsonify(success=False, error="Playlist manager unavailable; plan consumed"), 503
+        start = time.monotonic()
+        result = manager.apply_playlist_organization(plan, confirmed=True)
+        success = result.get("success") is True
+        return jsonify({**result, "success": success, "duration_seconds": int(time.monotonic() - start)}), 200 if success else 409
+    except (BadRequest, RequestEntityTooLarge) as exc:
+        return jsonify(success=False, error=exc.description), exc.code
+    except Exception:
+        return jsonify(success=False, error="Move outcome uncertain; plan consumed. Inspect Music manually; do not resubmit."), 500
 
-        if not confirmed:
-            return jsonify({"error": "Confirmation required"}), 400
 
-        changes = data.get("changes", [])
-        if not changes:
-            return jsonify({"moved": 0, "failed": 0, "duration_seconds": 0, "success": True, "results": []})
+class _PlaylistPlanStore:
+    """Process-local, bounded, one-use capabilities; the service owns durable recovery."""
 
-        pm = _get_playlist_manager()
-        if not pm:
-            return jsonify({"error": "Playlist manager unavailable"}), 503
+    ttl = 15 * 60
+    max_entries = 64
+    max_plan_bytes = 2 * 1024 * 1024
+    max_total_bytes = 16 * 1024 * 1024
 
-        import time as _time
-        start = _time.time()
-        results = []
-        moved = 0
-        failed = 0
-        for change in changes:
-            pid = change.get("playlist_id", "")
-            name = change.get("name", pid)
-            genre = change.get("genre", "")
-            folder = f"Genre/{genre.title()}" if genre else "Unclassified"
-            try:
-                ok = pm.move_playlist_to_folder(name, folder)
-                results.append({"playlist_id": pid, "success": ok, "message": f"Moved to {folder}" if ok else "Move failed"})
-                if ok:
-                    moved += 1
-                else:
-                    failed += 1
-            except Exception as exc:
-                logger.warning(f"Move failed for {name}: {exc}")
-                results.append({"playlist_id": pid, "success": False, "message": str(exc)})
-                failed += 1
+    def __init__(self):
+        self.records = OrderedDict()
+        self.lock = Lock()
 
-        return jsonify(
-            {
-                "moved": moved,
-                "failed": failed,
-                "duration_seconds": int(_time.time() - start),
-                "success": failed == 0,
-                "results": results,
+    def _prune(self):
+        now = time.monotonic()
+        for token, record in list(self.records.items()):
+            if record["expires_at"] <= now:
+                del self.records[token]
+
+    def put(self, sid, kind, plan):
+        snapshot = deepcopy(plan)
+        size = len(json.dumps(snapshot, allow_nan=False).encode("utf-8"))
+        if size > self.max_plan_bytes:
+            raise RequestEntityTooLarge("Preview exceeds the local plan size limit")
+        with self.lock:
+            self._prune()
+            for token, record in list(self.records.items()):
+                if (record["sid"], record["kind"]) == (sid, kind):
+                    del self.records[token]
+            while self.records and (
+                len(self.records) >= self.max_entries
+                or sum(record["size"] for record in self.records.values()) + size > self.max_total_bytes
+            ):
+                self.records.popitem(last=False)
+            token = secrets.token_urlsafe(32)
+            self.records[token] = {
+                "sid": sid, "kind": kind, "plan": snapshot, "size": size,
+                "expires_at": time.monotonic() + self.ttl,
             }
-        )
-    except Exception as e:
-        logger.error(f"Failed to move playlists: {e}")
-        return jsonify({"error": str(e)}), 500
+        return token, snapshot
+
+    def claim(self, token, sid, kind):
+        with self.lock:
+            self._prune()
+            record = self.records.get(token)
+            if record is None or (record["sid"], record["kind"]) != (sid, kind):
+                return None
+            # Remove before service construction/writer invocation, including exceptions.
+            del self.records[token]
+            return record["plan"]
+
+
+_playlist_plans = _PlaylistPlanStore()
+_PLAN_REQUEST_BYTES = 16 * 1024
+
+
+def _plan_json(required, optional=()):
+    if request.args or not request.is_json:
+        raise BadRequest("JSON body without query parameters required")
+
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("Duplicate fields")
+            result[key] = value
+        return result
+
+    def reject_constant(value):
+        raise ValueError("Non-finite JSON number")
+
+    try:
+        data = json.loads(bounded_request_body(_PLAN_REQUEST_BYTES), object_pairs_hook=unique_object,
+                          parse_constant=reject_constant)
+    except (ValueError, UnicodeError, RecursionError):
+        raise BadRequest("Invalid JSON body") from None
+    if (not isinstance(data, dict) or not set(required) <= set(data)
+            or set(data) - set(required) - set(optional)):
+        raise BadRequest("Unexpected or missing fields")
+    return data
+
+
+def _persistent_id(value):
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9A-Fa-f]{16}", value):
+        raise BadRequest("A 16-character persistent ID is required")
+    return value
+
+
+def _playlist_plan_read(playlist_id=None):
+    try:
+        if request.args or bounded_request_body(_PLAN_REQUEST_BYTES):
+            raise BadRequest("This endpoint accepts no query or body")
+        if playlist_id is not None:
+            _persistent_id(playlist_id)
+        service = _get_curation_service()
+        if service is None:
+            return jsonify(success=False, error="Curation service unavailable"), 503
+        rows = (service.get_seed_playlist_sources() if playlist_id is None
+                else service.get_seed_playlist_source_tracks(playlist_id))
+        return jsonify(rows)
+    except (BadRequest, RequestEntityTooLarge) as exc:
+        return jsonify(success=False, error=exc.description), exc.code
+    except Exception:
+        return jsonify(success=False, error="Unable to read selected sources"), 503
+
+
+@app.get("/api/playlist-plans/sources")
+def playlist_plan_sources():
+    return _playlist_plan_read()
+
+
+@app.get("/api/playlist-plans/source/<playlist_id>/tracks")
+def playlist_plan_source_tracks(playlist_id):
+    return _playlist_plan_read(playlist_id)
+
+
+@app.post("/api/playlist-plans/seed/preview", defaults={"kind": "seed"})
+@app.post("/api/playlist-plans/split/preview", defaults={"kind": "split"})
+def playlist_plan_preview(kind):
+    try:
+        if kind == "seed":
+            data = _plan_json({"playlist_id", "seed_track_id"}, {"limit"})
+            _persistent_id(data["playlist_id"])
+            _persistent_id(data["seed_track_id"])
+            limit = data.get("limit", 30)
+            if type(limit) is not int or not 1 <= limit <= 30:
+                raise BadRequest("limit must be an integer from 1 to 30")
+        else:
+            data = _plan_json({"playlist_ids"})
+            ids = data["playlist_ids"]
+            if not isinstance(ids, list) or not 1 <= len(ids) <= 100:
+                raise BadRequest("playlist_ids must contain 1 to 100 IDs")
+            for playlist_id in ids:
+                _persistent_id(playlist_id)
+        service = _get_curation_service()
+        if service is None:
+            return jsonify(success=False, error="Curation service unavailable"), 503
+        plan = (service.preview_seed_playlist(data["playlist_id"], data["seed_track_id"], limit=limit)
+                if kind == "seed" else service.preview_playlist_splits(ids))
+        token, snapshot = _playlist_plans.put(session["sid"], kind, plan)
+        return jsonify(plan_id=token, plan=snapshot, expires_in=_playlist_plans.ttl)
+    except (BadRequest, RequestEntityTooLarge) as exc:
+        return jsonify(success=False, error=exc.description), exc.code
+    except ValueError:
+        return jsonify(success=False, error="Selected source or seed cannot be previewed"), 400
+    except Exception:
+        return jsonify(success=False, error="Unable to preview playlist plan"), 503
+
+
+@app.post("/api/playlist-plans/seed/apply", defaults={"kind": "seed"})
+@app.post("/api/playlist-plans/split/apply", defaults={"kind": "split"})
+def playlist_plan_apply(kind):
+    try:
+        data = _plan_json({"plan_id", "confirmed"})
+        if data["confirmed"] is not True:
+            raise BadRequest("confirmed must be literal true")
+        token = data["plan_id"]
+        if not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
+            raise BadRequest("Invalid plan_id")
+        plan = _playlist_plans.claim(token, session["sid"], kind)
+        if plan is None:
+            return jsonify(success=False, error="Plan unavailable, expired, replaced or already submitted"), 409
+        service = _get_curation_service()
+        if service is None:
+            return jsonify(success=False, error="Curation service unavailable; plan consumed"), 503
+        result = (service.apply_seed_playlist(plan, confirmed=True) if kind == "seed"
+                  else service.apply_playlist_splits(plan, confirmed=True))
+        if not isinstance(result, dict):
+            raise RuntimeError("Invalid apply report")
+        # Preserve per-part and unresolved reports without turning failures into success.
+        success = result.get("success") is True
+        return jsonify({**result, "success": success}), 200 if success else 409
+    except (BadRequest, RequestEntityTooLarge) as exc:
+        return jsonify(success=False, error=exc.description), exc.code
+    except Exception:
+        return jsonify(success=False, error=(
+            "Apply outcome uncertain; plan consumed. Inspect the journal and Music manually; do not resubmit."
+        )), 500
 
 
 @app.route("/api/curation/preview", methods=["GET"])
@@ -1119,7 +1253,10 @@ def save_settings():
 
 @app.before_request
 def before_request_handler():
-    """Initialize database on first request."""
+    """Initialize only after access checks, never for login/static/plan validation."""
+    if (not g.get("web_authenticated") or request.endpoint in {"session_info", "organize_playlists", "move_playlists"}
+            or request.path.startswith("/api/playlist-plans")):
+        return
 
     def init():
         try:
@@ -1352,8 +1489,10 @@ def list_dedupe():
 
 
 def run_server(host: str = WEB_HOST, port: int = WEB_PORT, debug: bool = WEB_DEBUG):
-    """Start the web server."""
-    logger.info(f"Starting web server on {host}:{port} (debug={debug})")
+    """Start only a protected loopback listener; never enable debugger/reloader."""
+    settings = load_access_settings(host, port, debug)
+    app.extensions["web_access"] = settings
+    logger.info("Starting local web server at %s", settings.origin)
 
     # Initialize database first
     logger.info("Initializing database...")
@@ -1363,7 +1502,8 @@ def run_server(host: str = WEB_HOST, port: int = WEB_PORT, debug: bool = WEB_DEB
     logger.info("Loading playlists from Apple Music...")
     _init_playlists_from_apple_music()
 
-    app.run(host=host, port=port, debug=debug)
+    app.run(host=settings.bind_host, port=settings.port, debug=False,
+            use_reloader=False, use_debugger=False)
 
 
 if __name__ == "__main__":

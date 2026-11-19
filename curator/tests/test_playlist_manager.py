@@ -20,6 +20,7 @@ def mock_apple_music():
     """Create mock AppleMusicInterface."""
     mock = MagicMock()
     mock.get_existing_folders.return_value = {}
+    mock.get_playlist_topology_strict.return_value = []
     mock.create_folder.return_value = ("melodic", True)
     return mock
 
@@ -61,6 +62,27 @@ class TestPlaylistManagerInitialization:
         """Test that caches have correct types."""
         assert isinstance(playlist_manager_dry_run._folder_cache, dict)
         assert isinstance(playlist_manager_dry_run._playlist_cache, dict)
+
+
+def test_default_dry_run_keeps_readers_actual_and_suppresses_legacy_writers(mock_apple_music):
+    with patch("src.playlist_manager.AppleMusicInterface", return_value=mock_apple_music):
+        manager = PlaylistManager()
+    mock_apple_music.get_playlist_topology_strict.return_value = [
+        {"persistent_id": "AABBCCDDEEFF0011", "name": "Inbox", "kind": "folder",
+         "parent_id": None, "modifiable": True},
+        {"persistent_id": "1122334455667788", "name": "Source", "kind": "playlist",
+         "parent_id": None, "modifiable": True},
+    ]
+    assert manager.dry_run is True
+    assert manager.get_existing_folders() == {"Inbox": "AABBCCDDEEFF0011"}
+    assert manager.get_playlist_info("Source")["persistent_id"] == "1122334455667788"
+    assert mock_apple_music.get_playlist_topology_strict.call_count == 2
+    with patch.object(manager, "_run_applescript_inline") as inline:
+        with patch.object(manager, "_run_applescript_file") as file_runner:
+            assert manager.create_folder("Missing") == (False, None)
+            assert manager.move_playlist_to_folder("Source", "Inbox") is True
+            inline.assert_not_called()
+            file_runner.assert_not_called()
 
 
 class TestDryRunMode:
@@ -127,18 +149,16 @@ class TestExecuteMode:
 class TestFolderCreation:
     """Tests for folder creation logic."""
 
-    def test_folder_creation_with_mock(self, playlist_manager_dry_run):
-        """Test folder creation with mocked AppleScript."""
+    def test_folder_creation_with_mock(self, playlist_manager_execute):
+        """Explicit legacy execute mode retains its existing creation contract."""
         with patch.object(
-            playlist_manager_dry_run,
+            playlist_manager_execute,
             "_run_applescript_inline",
             return_value=(True, "folder-id-456"),
         ):
-            success, folder_id = playlist_manager_dry_run.create_folder("ElectronicMusic")
-
-            # Should cache the folder
+            success, folder_id = playlist_manager_execute.create_folder("ElectronicMusic")
             assert success is True
-            assert "ElectronicMusic" in playlist_manager_dry_run._folder_cache
+            assert "ElectronicMusic" in playlist_manager_execute._folder_cache
 
     def test_folder_creation_duplicate_prevention(self, playlist_manager_dry_run):
         """Test that creating a duplicate folder doesn't create again."""
