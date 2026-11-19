@@ -1047,11 +1047,43 @@ end tell
     def _read_playlist_tracks(self, selector: str, strict: bool = False) -> Optional[List[Dict]]:
         """Share batched metadata reading while retaining the legacy name-reader contract."""
         error_action = "error errMsg" if strict else 'return ""'
-        # Keep empty edge fields intact through _run_applescript's stdout.strip().
-        result_expression = '"TRACK_ROWS" & linefeed & outputText & linefeed & "END_TRACK_ROWS"' if strict else "outputText"
-        location_read = '''
-            set trackLocations to location of every track of targetPlaylist
-''' if strict else '''
+        if strict:
+            # Locations only exist on file tracks; reading them for every track
+            # aborts on streaming entries, so map file-track IDs in bulk.
+            location_read = '''
+            set fileIDs to {}
+            set fileLocations to {}
+            try
+                set fileIDs to persistent ID of every file track of targetPlaylist
+                set fileLocations to location of every file track of targetPlaylist
+            end try
+'''
+            location_path = '''
+                set trackLocation to ""
+'''
+            file_map = '''
+        set fileRows to {{}}
+        if (count of fileIDs) > 0 and (count of fileLocations) is (count of fileIDs) then
+            repeat with fileIndex from 1 to count of fileIDs
+                try
+                    set filePath to POSIX path of (item fileIndex of fileLocations as alias)
+                    set AppleScript's text item delimiters to tab
+                    set end of fileRows to {{my cleanText(item fileIndex of fileIDs), my cleanText(filePath)}} as text
+                end try
+            end repeat
+        end if
+        set AppleScript's text item delimiters to linefeed
+        set mapText to fileRows as text
+'''
+            # Keep empty edge fields intact through _run_applescript's stdout.strip().
+            result_expression = (
+                '"TRACK_ROWS" & linefeed & outputText & linefeed & "END_TRACK_ROWS"'
+                ' & linefeed & "FILE_ROWS" & linefeed & mapText & linefeed & "END_FILE_ROWS"'
+            )
+        else:
+            result_expression = "outputText"
+            file_map = ""
+            location_read = '''
             try
                 set trackLocations to location of every track of targetPlaylist
             on error
@@ -1061,11 +1093,7 @@ end tell
                 end repeat
             end try
 '''
-        location_path = '''
-                if item trackIndex of trackLocations is not missing value then
-                    set trackLocation to POSIX path of (item trackIndex of trackLocations as alias)
-                end if
-''' if strict else '''
+            location_path = '''
                 try
                     set trackLocation to POSIX path of (item trackIndex of trackLocations as alias)
                 end try
@@ -1100,6 +1128,7 @@ tell application "Music"
         end if
         set AppleScript's text item delimiters to linefeed
         set outputText to trackRows as text
+{file_map}
         set AppleScript's text item delimiters to oldDelimiters
         return {result_expression}
     on error errMsg
@@ -1111,15 +1140,40 @@ end tell
         success, output = self._run_applescript(script)
         if not success:
             raise RuntimeError(f"Failed to load playlist tracks: {output}")
+        file_paths: Dict[str, str] = {}
         if strict:
-            prefix, suffix = "TRACK_ROWS\n", "\nEND_TRACK_ROWS"
-            if not output.startswith(prefix) or not output.endswith(suffix):
+            prefix = "TRACK_ROWS\n"
+            if not output.startswith(prefix):
                 raise RuntimeError("Malformed playlist membership returned by Music")
-            output = output[len(prefix):-len(suffix)]
+            output = output[len(prefix):]
+            if "\nFILE_ROWS\n" in output:
+                output, map_text = output.split("\nFILE_ROWS\n", 1)
+                if not output.endswith("\nEND_TRACK_ROWS"):
+                    raise RuntimeError("Malformed playlist membership returned by Music")
+                output = output[:-len("\nEND_TRACK_ROWS")]
+                end_marker = "\nEND_FILE_ROWS"
+                if not map_text.endswith(end_marker):
+                    raise RuntimeError("Malformed playlist file map returned by Music")
+                map_text = map_text[:-len(end_marker)]
+                for line in map_text.split("\n") if map_text else []:
+                    if not line:
+                        continue
+                    fields = [self._decode_strict_text(field) for field in line.split("\t")]
+                    if len(fields) != 2 or not re.fullmatch(r"[0-9A-Fa-f]{16}", fields[0]) or not fields[1]:
+                        raise RuntimeError("Malformed playlist file map returned by Music")
+                    file_paths[fields[0]] = fields[1]
+            elif output.endswith("\nEND_TRACK_ROWS"):
+                output = output[:-len("\nEND_TRACK_ROWS")]
+            else:
+                raise RuntimeError("Malformed playlist membership returned by Music")
         if not output:
             return None
 
         tracks = self._parse_track_rows(output, strict=strict)
+        if strict and tracks:
+            for track in tracks:
+                if not track["filepath"]:
+                    track["filepath"] = file_paths.get(track["persistent_id"], "")
         return tracks if tracks else None
 
     def _parse_track_rows(self, output: str, strict: bool = False) -> Optional[List[Dict]]:
