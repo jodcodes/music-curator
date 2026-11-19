@@ -82,6 +82,29 @@ def test_id_reader_empty_playlist_is_successful_empty_list(monkeypatch):
     assert interface.get_playlist_tracks_by_id(PLAYLIST_ID) == []
 
 
+def test_id_reader_merges_bulk_file_track_locations(monkeypatch):
+    interface = AppleMusicInterface()
+    scripts = []
+    row = f"Song\t{TRACK_ID}\tArtist\tAlbum\tGenre\t120\t2020\tComposer\t180\t"
+    stream = "Stream\t8877665544332211\tArtist\tAlbum\tGenre\t0\t2021\t\t150\t"
+    response = (
+        "TRACK_ROWS\n" + row + "\n" + stream + "\nEND_TRACK_ROWS"
+        f"\nFILE_ROWS\n{TRACK_ID}\t/Volumes/Music/song.aiff\nEND_FILE_ROWS"
+    )
+
+    def fake_run(script):
+        scripts.append(script)
+        return True, response
+
+    monkeypatch.setattr(interface, "_run_applescript", fake_run)
+    tracks = interface.get_playlist_tracks_by_id(PLAYLIST_ID)
+
+    assert tracks[0]["filepath"] == "/Volumes/Music/song.aiff"
+    assert tracks[1]["filepath"] == ""
+    assert "persistent ID of every file track of targetPlaylist" in scripts[0]
+    assert "location of every track of targetPlaylist" not in scripts[0]
+
+
 def test_id_reader_preserves_empty_trailing_fields_through_runner_trimming(monkeypatch):
     interface = AppleMusicInterface()
     row = f"Song\t{TRACK_ID}\tArtist\tAlbum\tGenre\t120\t2020\t\t\t"
