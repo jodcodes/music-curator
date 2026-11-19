@@ -130,16 +130,21 @@ def run_playlist_cover(args=None):
     if not playlist_id or not image or (apply and not confirmed) or (confirmed and not apply):
         print(error("Preview requires --playlist-id ID --image PATH. Apply separately with --apply --yes."))
         return 1
+    if apply:
+        print(error(
+            "Automated playlist cover replacement is unsupported on Music 1.7: "
+            "AppleScript cannot create artwork objects (make new artwork fails; "
+            "duplicate/copy leave the playlist unchanged). "
+            f"In Music, select the playlist, open Edit via the playlist's More menu, "
+            f"click the artwork Add control, choose {image}, confirm with Done, then "
+            "verify the displayed cover."
+        ))
+        return 1
+
     if not require_macos("Playlist cover"):
         return 1
     try:
         music = AppleMusicInterface()
-        if apply:
-            print(warning("Applying once. Inspect Music after any uncertain result; do not retry blindly."))
-            result = music.set_playlist_cover_by_id(playlist_id, image)
-            print(json.dumps({**result, "applied": True}, ensure_ascii=False, indent=2))
-            return 0
-
         cover = music._cover_image(image)
         digest = hashlib.sha256()
         with open(cover["path"], "rb") as stream:

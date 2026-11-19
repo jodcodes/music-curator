@@ -9,7 +9,6 @@ import main
 from src.apple_music import AppleMusicInterface
 
 PID = "0123456789ABCDEF"
-ARTWORK_ID = "FEDCBA9876543210"
 PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"fixture-png"
 JPEG_BYTES = b"\xff\xd8\xff" + b"fixture-jpeg"
 
@@ -52,33 +51,6 @@ def test_cover_rejects_missing_symlink_empty_unknown_and_oversized(png, tmp_path
         AppleMusicInterface._cover_image(png)
 
 
-def test_cover_script_uses_exact_id_picture_class_and_verification(png):
-    music = AppleMusicInterface()
-    script, image = music.build_playlist_cover_script(PID, png)
-    assert image["format"] == "PNG"
-    assert f'persistent ID is "{PID}"' in script
-    assert "«class PNGf»" in script
-    assert "make new artwork" in script
-    assert "delete oldArtwork" in script
-    assert "count of artworks of targetPlaylist) is not 1" in script
-    with pytest.raises(ValueError):
-        music.build_playlist_cover_script("not-an-id", png)
-
-
-def test_cover_script_refuses_folders_smart_and_special_playlists(png):
-    script, _ = AppleMusicInterface().build_playlist_cover_script(PID, png)
-    assert "Playlist ID refers to a folder" in script
-    assert "Cannot modify a smart playlist" in script
-    assert "Cannot modify a special playlist" in script
-
-
-def test_cover_script_escapes_quotes_and_backslashes(tmp_path):
-    path = tmp_path / 'co"ver\\name.png'
-    path.write_bytes(PNG_BYTES)
-    script, _ = AppleMusicInterface().build_playlist_cover_script(PID, path)
-    assert 'co\\"ver\\\\name.png' in script
-
-
 def test_artwork_count_requires_numeric_strict_output(monkeypatch):
     music = AppleMusicInterface()
     monkeypatch.setattr(music, "_run_applescript", lambda script: (True, "2"))
@@ -91,26 +63,11 @@ def test_artwork_count_requires_numeric_strict_output(monkeypatch):
         music.get_playlist_artwork_count_by_id(PID)
 
 
-def test_cover_write_requires_verifiable_artwork_id(png, monkeypatch):
-    music = AppleMusicInterface()
-    monkeypatch.setattr(music, "_run_applescript", lambda script: (True, ARTWORK_ID))
-    result = music.set_playlist_cover_by_id(PID, png)
-    assert result["created_artwork_id"] == ARTWORK_ID
-    assert result["playlist_id"] == PID
-    monkeypatch.setattr(music, "_run_applescript", lambda script: (True, "not-an-id"))
-    with pytest.raises(RuntimeError):
-        music.set_playlist_cover_by_id(PID, png)
-    monkeypatch.setattr(music, "_run_applescript", lambda script: (False, "timeout"))
-    with pytest.raises(RuntimeError):
-        music.set_playlist_cover_by_id(PID, png)
-
-
 class FakeMusic:
     _cover_image = staticmethod(AppleMusicInterface._cover_image)
 
     def __init__(self):
         self.calls = []
-        self.write_error = None
 
     def get_playlist_info_by_id(self, playlist_id):
         self.calls.append(("info", playlist_id))
@@ -120,12 +77,6 @@ class FakeMusic:
         self.calls.append(("count", playlist_id))
         return 2
 
-    def set_playlist_cover_by_id(self, playlist_id, image):
-        self.calls.append(("write", playlist_id))
-        if self.write_error:
-            raise RuntimeError(self.write_error)
-        return {"playlist_id": PID, "created_artwork_id": ARTWORK_ID,
-                "format": "PNG", "path": str(image), "size": len(PNG_BYTES)}
 
 
 @pytest.fixture
@@ -156,21 +107,14 @@ def test_cover_apply_requires_literal_confirmation(fake_cli, png, capsys):
     assert "Apply separately" in capsys.readouterr().out
 
 
-def test_cover_apply_writes_once(fake_cli, png, capsys):
-    args = SimpleNamespace(playlist_id=PID, image=str(png), apply=True, yes=True)
-    assert main.run_playlist_cover(args) == 0
-    assert fake_cli.calls == [("write", PID)]
-    output = capsys.readouterr().out
-    assert '"applied": true' in output
-    assert ARTWORK_ID in output
-
-
-def test_cover_apply_reports_uncertain_without_retry(fake_cli, png, capsys):
-    fake_cli.write_error = "failed or uncertain after timeout"
+def test_cover_apply_is_refused_without_touching_music(fake_cli, png, capsys):
     args = SimpleNamespace(playlist_id=PID, image=str(png), apply=True, yes=True)
     assert main.run_playlist_cover(args) == 1
-    assert fake_cli.calls == [("write", PID)]
-    assert "failed or uncertain" in capsys.readouterr().out
+    assert fake_cli.calls == []
+    output = capsys.readouterr().out
+    assert "unsupported on Music 1.7" in output
+    assert "make new artwork" in output
+    assert str(png) in output
 
 
 def test_cover_cli_rejects_invalid_modes_without_music(fake_cli, png):

@@ -36,9 +36,11 @@ def test_static_guidance_never_promotes_script_results(offline_music, monkeypatc
 
     runner.assert_not_called()
     assert set(capabilities) == {"cover", "public_share"}
+    assert capabilities["cover"]["status"] == "manual"
+    assert capabilities["cover"]["automation"] == "unsupported"
+    assert capabilities["public_share"]["status"] == "manual"
+    assert capabilities["public_share"]["automation"] == "unknown"
     for capability in capabilities.values():
-        assert capability["status"] == "manual"
-        assert capability["automation"] == "unknown"
         assert capability["evidence"]
         assert capability["instructions"]
     assert capabilities["public_share"]["visibility"] == "unknown"
@@ -70,6 +72,7 @@ def test_presentation_cli_is_offline_on_any_platform(offline_music, monkeypatch,
     output = capsys.readouterr().out
     assert "cover: manual" in output
     assert "public_share: manual" in output
+    assert "automation: unsupported" in output
     assert "automation: unknown" in output
     assert "visibility: unknown" in output
     assert "public_url: None" in output
